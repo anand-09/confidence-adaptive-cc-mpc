@@ -1,0 +1,803 @@
+\documentclass[letterpaper, 10 pt, conference]{ieeeconf}
+
+\IEEEoverridecommandlockouts
+
+\overrideIEEEmargins
+
+\IEEEoverridecommandlockouts
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{cite}
+\usepackage{setspace}
+\setstretch{0.96}
+\graphicspath{{./figures/}{./outputs/}}
+
+% ------------------------------------------------------------------
+% Paragraph spacing
+% ------------------------------------------------------------------
+\setlength{\parskip}{0pt}
+
+% ------------------------------------------------------------------
+% Equation spacing
+% ------------------------------------------------------------------
+\setlength{\abovedisplayskip}{3pt plus 1pt minus 1pt}
+\setlength{\belowdisplayskip}{3pt plus 1pt minus 1pt}
+\setlength{\abovedisplayshortskip}{2pt plus 1pt}
+\setlength{\belowdisplayshortskip}{2pt plus 1pt}
+
+% ------------------------------------------------------------------
+% Float spacing (figures/tables)
+% ------------------------------------------------------------------
+\setlength{\textfloatsep}{5pt plus 1pt minus 1pt}
+\setlength{\floatsep}{3pt plus 1pt minus 1pt}
+\setlength{\intextsep}{5pt plus 1pt minus 1pt}
+
+% ------------------------------------------------------------------
+% Caption spacing
+% ------------------------------------------------------------------
+\usepackage[font=small,skip=2pt]{caption}
+\setlength{\abovecaptionskip}{2pt}
+\setlength{\belowcaptionskip}{0pt}
+
+% ------------------------------------------------------------------
+% Lists
+% ------------------------------------------------------------------
+\let\labelindent\relax
+\usepackage{enumitem}
+
+\setlist{nosep}
+\setlist[itemize]{topsep=2pt,itemsep=1pt,parsep=0pt}
+\setlist[enumerate]{topsep=2pt,itemsep=1pt,parsep=0pt}
+
+% ------------------------------------------------------------------
+% Section spacing
+% ------------------------------------------------------------------
+\usepackage{titlesec}
+\titlespacing*{\section}
+{0pt}{1.2ex plus 0.3ex minus 0.2ex}{0.5ex}
+
+\titlespacing*{\subsection}
+{0pt}{1.0ex plus 0.3ex minus 0.2ex}{0.4ex}
+
+\titlespacing*{\subsubsection}
+{0pt}{0.8ex plus 0.2ex minus 0.1ex}{0.3ex}
+\newtheorem{assumption}{Assumption}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\newtheorem{remark}{Remark}
+\newtheorem{definition}{Definition}
+
+\title{\LARGE \bf Confidence-Adaptive Chance-Constrained Model \\ Predictive Control for Autonomous Driving}
+
+
+\author{
+Anand Singh$^{1}$, Johannes Betz$^{2}$ and Mattia Piccinini$^{2}$%
+\thanks{$^{1}$Anand Singh is with the Department of Mathematical and Computing Science,
+School of Computing, Institute of Science Tokyo, 1528550, Japan
+{\tt\small as7376835@gmail.com}}%
+\thanks{$^{2}$Johannes Betz and Mattia Piccinini are with the Professorship of Autonomous Vehicle Systems,
+TUM School of Engineering and Design, Technical University of Munich,
+85748 Garching, Germany, and also with the Munich Institute of Robotics
+and Machine Intelligence (MIRMI)}%
+}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
+\begin{abstract}
+Autonomous vehicles must predict surrounding traffic participants to plan safely, but this prediction degrades during sudden braking, cut-ins, or occlusion events such as a pedestrian hidden behind a parked vehicle. Existing chance-constrained model predictive control planners fix their safety risk level in advance, so the margin kept around other agents does not adapt to how trustworthy the current prediction actually is. We propose \textcolor{red}{Confidence-Adaptive} Stochastic Predictive Control, which introduces a per-agent confidence state, derived from a regularized estimation objective, to adjust the risk level online. We show this yields a distributionally robust safety guarantee \emph{conditioned on a stated residual-calibration assumption}, establish recursive feasibility and stability via robust control theory, and derive a performance guarantee relative to fixed-risk baselines. We identify and correct a bias that arises when the confidence estimate is optimized jointly with control, and extend the framework to multi-agent scenes through an optimal risk-allocation rule. Closed-loop simulations on three urban driving scenarios, a braking cut-in, an occluded pedestrian, and a multi-agent intersection, together with a 100-trial randomized Monte Carlo study, demonstrate reduced conservatism compared to fixed-risk baselines while matching or improving on their empirical violation rates\textcolor{red}{.}
+\end{abstract}
+\section{Introduction}
+
+\textcolor{red}{Planning a maneuver in traffic requires an autonomous vehicle (AV) to predict how surrounding agents will behave, and to keep a safety margin around them that reflects how much that prediction can be trusted.} This uncertainty is not constant: a vehicle at steady speed is well predicted by a simple motion model, but the same model fails badly if that driver suddenly brakes or cuts in; a pedestrian at a corner is easy to predict until stepping off the curb; and an occluded crosswalk can hide a vulnerable road user until a parked vehicle no longer blocks the view.
+
+Chance-constrained MPC (CC-MPC), \textcolor{red}{a probabilistic-constraint instance of the broader stochastic MPC framework,} is the standard tool for planning under such uncertainty \cite{mesbah2016stochastic, farina2016stochastic}. \textcolor{red}{Throughout this paper we use \emph{chance-constrained} for this specific probabilistic-constraint formulation, and reserve \emph{stochastic}/\emph{robust} for the wider family of methods that instead propagate a state distribution or an uncertainty set through the horizon without an explicit probabilistic constraint, such as uncertainty-propagation stochastic NMPC \cite{zarrouki2024stochastic} and zero-order robust NMPC with ellipsoidal uncertainty sets \cite{zanelli2021zero,frey2024efficient}. Within the chance-constrained branch, CC-MPC has been} applied to motion planning around traffic participants \cite{blackmore2011chance} via analytically tightened constraints \cite{van2002conic}, the scenario approach \cite{schildbach2014scenario}, and risk allocation across the horizon \cite{ono2008iterative}. Recent work adapts constraint tightening online, learning a prediction-error set \cite{ma2026sensor} or handling Gaussian-mixture uncertainty \cite{engelaar2025stochastic}, while learning-based MPC more broadly refines the dynamics model, terminal ingredients, or the controller's own cost weights \cite{jahncke2026differentiable} while preserving a fixed constraint specification \cite{salzmann2020trajectron++, hewing2020learning,aswani2013provably,rosolia2017learning,wabersich2018linear,koller2018learning}. In nearly all of this work, the admissible risk level is fixed at design time or adapted to maintain a prescribed empirical violation rate, rather than being determined from an explicit estimate of the reliability of the current prediction for a specific agent. The methods in \cite{ma2026sensor,engelaar2025stochastic} provide the closest empirical baselines, as both adapt constraint tightening online in response to prediction uncertainty. Section~\ref{sec:limitations} discusses benchmarking against them directly. \cite{ma2026sensor,engelaar2025stochastic} are the natural empirical baselines for this claim: \textcolor{red}{both adapt the constraint tightening online (the former by learning a prediction-error set, the latter by handling Gaussian-mixture uncertainty), but in both cases the tightening tracks the shape or magnitude of the uncertainty distribution itself, not a distinct, explicitly derived reliability estimate for a specific agent's prediction, and neither examines the joint-optimization coupling we analyze in Theorem~\ref{thm:bias}.} Section~\ref{sec:limitations} discusses benchmarking against them \textcolor{red}{directly}. \textcolor{red}{Section~\ref{sec:literature-baselines} now reimplements both schemes in the same plant, predictor, and Cantelli algebra, and shows that the proposed method is the best among them: lowest mean back-off at the same zero-violation outcome.}
+
+A natural fix is a confidence signal that tracks recent prediction performance and adjusts risk online. Existing work produces such a signal for purposes other than CC-MPC: Bayesian filtering yields a confidence estimate for reachability-based safety monitors \cite{fisac2018general}, later extended to game-theoretic interaction \cite{tian2022safety}, and a large model's self-reported confidence has been used as a trust signal for planning \cite{yao2024calmm}; agent-level risk has also been studied as a perception problem in its own right, e.g. via visual question answering over driving scenes \cite{gao2025nurisk}, separately from how such a risk estimate would be used to set a planner's constraint. None of these couples the resulting estimate to the admissible risk level of a chance constraint.
+
+This leaves two questions open. First, in each case the confidence update law is hand-designed and tuned, rather than derived as the solution of a stated estimation problem. Second, none of this work asks whether the confidence signal should be computed upstream of the planner, as an independent estimator, or instead optimized jointly with the control input inside the same MPC problem, and if the latter, what that coupling does to the estimate and the resulting margin. Related work reasons about multiple future behaviors through branch and contingency planning \cite{li2023marc,mustafa2024racp} and conformal-prediction-calibrated sets \cite{dixit2023adaptive}, or improves interaction-aware prediction and worst-case envelopes directly \cite{sadigh2016planning,schwarting2018planning,fisac2019hierarchical,shalev2017formal}; occlusion-aware planning has been studied via POMDPs/RL \cite{isele2018navigating} and online risk regions \cite{yu2019occlusion}. To our knowledge, no prior work makes a CC-MPC planner's admissible risk itself a function of a derived, per-agent prediction-reliability estimate; we treat this as an open gap.
+
+
+\textcolor{red}{We address these two questions directly. We derive the confidence update law from a stated regularized estimation objective rather than positing it (Section~\ref{sec:confidence}), drawing on standard recursive filtering \cite{5311910} as the underlying estimation principle. We then examine what happens if this estimate is instead optimized jointly with the control input, using a first-order (KKT) sensitivity argument \cite{wright1999numerical} to characterize the resulting bias in the confidence estimate (Section~\ref{sec:bias}).} We extend the mechanism to multiple agents by generalizing the risk-allocation idea of \cite{ono2008iterative} from the horizon dimension to the agent dimension.
+
+The resulting \textbf{CC-MPC is used online as a receding-horizon trajectory planner for autonomous driving}. At each time step, it receives the current vehicle state and updated predictions of surrounding agents, computes the confidence-dependent risk levels and safety back-offs, and solves the resulting chance-constrained MPC problem over a finite prediction horizon. The controller therefore performs \textbf{online maneuver planning with safety-constrained obstacle/agent avoidance}. Only the first control action is executed; after the next observation is received, the predictions and confidence states are updated and the CC-MPC is solved again. We evaluate this closed-loop planning framework on three urban scenarios representing distinct failure modes: a sustained mismatch from a braking cut-in, a sudden surprise from an occluded pedestrian, and a combined two-agent scene. \textcolor{red}{The events follow public catalog classes (NHTSA/ISO~34502, Euro~NCAP, CommonRoad), and $\sigma_0$, $\kappa$ are set from published nuScenes constant-velocity residuals (Section~\ref{sec:public-protocol}).}
+
+
+The paper's \textbf{contributions}: \emph{(i)} We derive a confidence law for prediction reliability as the unique minimizer of a regularized weighted-least-squares objective with a Bayesian interpretation (Proposition~\ref{prop:derivation}). The resulting confidence-dependent safety margin solves a distributionally robust chance constraint for the proposed \textbf{confidence-adaptive chance-constrained MPC (CC-MPC)} (Proposition~\ref{prop:dro}). Using robust-MPC techniques \cite{rawlings2020model}, we establish recursive feasibility, practical stability, and a performance guarantee relative to fixed-risk CC-MPC baselines; this holds because the confidence-modulated back-off stays bounded between known worst- and best-case values.
+\emph{(ii)} Our confidence law is estimated outside the CC-MPC optimization by design. We separately analyze a hypothetical alternative in which the confidence value is treated as a free variable and optimized jointly with the control input inside the same MPC problem (Section~\ref{sec:bias}). We show that this joint optimization introduces a provable optimism bias whenever the safety constraint is active, a failure mode absent from prior adaptive-risk schemes \cite{ma2026sensor,engelaar2025stochastic}, whose estimators are decoupled from control. We supply a trust-region correction that restores safety for this hypothetical scheme. \textcolor{red}{Section~\ref{sec:thm3-eval} evaluates Theorem~\ref{thm:bias} numerically by instantiating $(\mathrm P_{\mathrm{naive}})$ on the paper's $\rho(\cdot)$.}
+\emph{(iii)} We extend the CC-MPC framework to multiple agents via a confidence-weighted risk-allocation rule, proving that it is safety-preserving and is the unique minimizer of a generalized KL-divergence objective subject to a fixed scene-level risk budget. We validate contributions (i) and (iii) in closed loop on three urban driving scenarios plus a 100-trial randomized Monte Carlo study. Contribution (ii) is established analytically through the KKT sensitivity analysis in Section~\ref{sec:bias}. \textcolor{red}{Section~\ref{sec:literature-baselines} additionally compares against reimplementations of \cite{ma2026sensor,engelaar2025stochastic}.} Section~\ref{sec:limitations} scopes what each contribution's validation does and does not yet cover.
+
+\textit{Notation}: $\mathbb{R}$, $\mathbb{R}_+$, $\mathbb{R}^n$, $\mathbb{R}^{p\times q}$ denote reals, non-negative reals, and vector/matrix spaces. $\Pr(\cdot)$, $\mathbb{E}[\cdot]$, $\operatorname{Var}(\cdot)$ denote probability, expectation, variance. $\operatorname{sat}_{[0,1]}(\cdot)$ saturates to $[0,1]$; $\|\cdot\|$ is the Euclidean norm. $x_{j\mid k}$ is the predicted value of $x$ at time $j$ made at time $k$; a hat denotes a nominal/estimated quantity.
+
+\section{Problem Formulation}
+\label{sec:formulation}
+
+Consider an ego vehicle operating alongside \textcolor{red}{one or more} relevant surrounding agents, \textcolor{red}{whose joint state evolves as}
+\begin{equation}
+x_{k+1} = f(x_k,u_k) + w_k, \qquad w_k \sim \mathcal D_k,
+\end{equation}
+where $x_k \in \mathbb{R}^{n}$ collects the ego state together with that of the relevant surrounding agents, defined as all detected dynamic agents within a predefined radius $R$ of the ego vehicle (e.g., vehicles, pedestrians, and other road users), $u_k \in \mathbb{R}^m$ is the ego control input, and $w_k$ captures ego process noise together with the unmodeled component of agents' motion. The controller uses a nominal predictive model $\hat{f}$ (e.g., constant-velocity/acceleration or a stationary pedestrian model), generally $\hat{f}\neq f$ since real drivers may brake or cut in and pedestrians may enter the road. The planner constructs open-loop predictions $\hat{x}_{k+j\mid k}$ over horizon $N$, with safety encoded through a scalar constraint $g$ (e.g., a minimum-gap constraint), yielding a CC-MPC problem subject to a chance constraint: a constraint required to hold with at least a specified probability $1-\delta$, where $\Pr(\cdot)$ denotes the probability over realizations of the disturbance $w_k$ and, equivalently, the agent state $x_{k+j}$ driving the true dynamics. The CC-MPC solves a finite-horizon \textbf{reference-free maneuver-planning problem}, rather than a reference-trajectory tracking problem. The ego state is $x=(x,v_x,y,v_y)$ and the control is $u=(a_x,a_y)$, with linear discrete-time double-integrator dynamics $x_{k+1}=Ax_k+Bu_k$. The stage cost $\ell(x,u)$ is a convex quadratic cost that penalizes control effort and deviation from the desired lane/maneuver, while $V_f(x)$ is the corresponding terminal quadratic cost. Dynamic-obstacle avoidance is represented by the safety-margin constraint $g(\hat{x}_{j\mid k},u_j)\leq0$. With the linear dynamics and convex quadratic cost and constraint approximations used in our implementation, the resulting CC-MPC is a convex quadratic program solved at every sampling step:
+\begin{align}
+\min_{u_{0:N-1}} \quad & \sum_{j=0}^{N-1}\ell(\hat{x}_{j\mid k},u_j) + V_f(\hat{x}_{N\mid k}) \nonumber \\
+\text{s.t.}\quad & \hat{x}_{j+1\mid k}=A\hat{x}_{j\mid k}+Bu_j,\qquad \hat{x}_{0\mid k}=x_k, \nonumber \\
+& \Pr\big(g(x_{k+j},u_j)\leq0\big)\geq1-\delta,\qquad j=1,\ldots,N .
+\label{eq:cc-classical}
+\end{align}
+
+with $\delta$ fixed for all $k$. \textcolor{red}{Eq.~\eqref{eq:cc-classical} is the chance constraint referred to throughout the paper}. \textcolor{red}{We argue that the admissible risk level should not be fixed in advance. When an agent's actual behavior departs from $\hat f$, the prediction of that agent becomes less trustworthy, and the risk level the ego can responsibly promise should shrink accordingly. We treat this trustworthiness itself as unknown and time-varying, to be tracked online by an estimation problem, rather than assumed.} For a single surrounding agent, $x_k$ in (1) collects ego and that agent's state; the multi-agent case extends every quantity in this section to be agent-indexed, $x_k \to (x_k, \{x_k^{(i)}\})$, with a confidence estimate applied independently to each agent $i$.
+
+\subsection{Limitations of Fixed-Risk Formulations}
+\label{sec:difficulties}
+The formulation in \eqref{eq:cc-classical} provides a standard way to account for uncertainty, but it assumes that the admissible risk level $\delta$ is known and fixed. In practice, however, the reliability of an agent's prediction can change over time, and this creates four issues that the fixed-risk formulation does not address. \textbf{(D1) Fixed risk level:} The same $\delta$ is used whether an agent follows the nominal model $\hat f$ or suddenly brakes, cuts in, or emerges from an occlusion. The planner therefore cannot increase its conservatism when the prediction becomes unreliable or reduce it when the prediction is trustworthy. \textbf{(D2) Confidence estimation:} Making the risk level adaptive requires a measure of prediction reliability, but existing confidence-like signals for planning and safety monitoring \cite{fisac2018general,tian2022safety,yao2024calmm} are generally based on hand-designed update rules rather than an explicit estimation objective, and are not directly linked to the admissible risk of a chance constraint. \textbf{(D3) Confidence--control coupling:} It is also necessary to determine whether confidence should be estimated independently before the MPC solve or optimized jointly with the control input. Joint optimization is potentially problematic because a higher confidence relaxes the safety constraint and may therefore create an incentive for the optimizer to overestimate confidence. \textbf{(D4) Multi-agent risk allocation:} Finally, in a scene with multiple safety-critical agents, their prediction reliabilities may differ at the same time. A single-agent confidence mechanism therefore does not determine how a shared scene-level risk budget should be distributed across agents while maintaining a bound on the probability of a violation anywhere in the scene.
+\section{Proposed Method}
+\label{sec:method}
+
+We propose a confidence-adaptive chance-constrained MPC framework that adjusts the planner's safety margin according to the reliability of surrounding-agent predictions. The framework combines prediction-error-based confidence estimation, confidence-dependent risk modulation, multi-agent risk allocation, and chance-constrained MPC within a receding-horizon loop. Fig~\ref{fig:framework_overview} summarizes the overall architecture and shows how these components address the challenges identified in D1--D4.
+
+\subsection{Overview}
+\label{sec:method-overview}
+
+To address the difficulties identified above, Fig.~\ref{fig:framework_overview} organizes the proposed solution into a sequence of connected blocks. The prediction and evidence block compares the predicted and observed behavior of each surrounding agent, providing the information needed to construct a confidence state. This addresses the challenge in \textbf{D2}: prediction reliability must be inferred online from recent prediction errors rather than assumed to be known a priori. The confidence update block uses this evidence to estimate the agent-specific confidence $c_k^{(i)}$, providing an online measure of prediction reliability that can subsequently modulate the safety risk and back-off (Sections~\ref{sec:confidence-error}--\ref{sec:confidence-law}).
+ The resulting confidence is then used by the risk modulation block to adapt the admissible risk level $\delta(c_k^{(i)})$ and safety back-off $\rho(c_k^{(i)})$, resolving \textbf{D1} (Section~\ref{sec:confidence-risk}). For multiple agents, the risk allocation block distributes a shared scene-level risk budget according to their confidence states, resolving \textbf{D4} (Section~\ref{sec:multiagent}). These confidence-dependent constraints are subsequently passed to the \textbf{CC-MPC}, which performs online receding-horizon maneuver planning with safety-constrained obstacle/agent avoidance. At each time step, the CC-MPC computes a feasible control sequence over the prediction horizon, subject to the confidence-dependent chance constraints, and applies only its first control action. The next observation is then used to update the surrounding-agent predictions and confidence states before the optimization is solved again. Confidence is estimated outside the MPC optimization by design; the effect of jointly optimizing confidence with control is analyzed in Section~\ref{sec:bias} and evaluated in Section~\ref{sec:thm3-eval}, resolving \textbf{D3}. The new observation therefore closes the loop and enables the same procedure to be repeated at every sampling instant, as summarized in Algorithm~\ref{alg:main}.
+
+
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.98\textwidth]{figures/summary_fig.pdf}
+    \caption{Overview of the proposed confidence-adaptive chance-constrained MPC framework. Prediction errors provide evidence for the per-agent confidence estimate (D2), which determines the admissible risk and safety back-off (D1) and, for multiple agents, the allocation of a shared risk budget (D4). The resulting confidence-dependent constraints are used by the chance-constrained MPC; confidence is estimated outside the MPC solve by design, avoiding the joint-optimization bias analyzed in D3. The first control action is then executed, new observations are collected, and the process repeats in a receding-horizon closed loop.}
+    \label{fig:framework_overview}
+\end{figure*}
+
+\subsection{From Prediction Error to a Confidence State}
+\label{sec:confidence}
+
+We now walk through the first two blocks of Fig.~\ref{fig:framework_overview}, turning a raw prediction error into the confidence state $c_k$ that the rest of the paper builds on.
+
+\subsubsection{Prediction and evidence}
+\label{sec:confidence-error}
+
+Let $\hat x_{k\mid k-1}$ be the one-step prediction of $x_k$ (in particular of the relevant surrounding agent) made at $k-1$ using $\hat f$, and define the realized error and its normalized, saturated \emph{evidence} signal
+\begin{equation}
+e_k = \big\| x_k - \hat x_{k\mid k-1}\big\|, \hspace{4pt} \bar e_k = \operatorname{sat}_{[0,1]}\!\left(\frac{e_k}{e_{\mathrm{norm}}}\right), \hspace{4pt} y_k := 1-\bar e_k, \label{eq:error}
+\end{equation}
+$e_{\mathrm{norm}}>0$ a calibration constant. $y_k \in [0,1]$ is a single noisy observation, at $k$, of the unobserved instantaneous local validity of the ego's model of that agent's behavior: this is the \emph{Prediction \& Evidence} block of Fig.~\ref{fig:framework_overview}. When multiple agents are tracked (Section~\ref{sec:multiagent}), \eqref{eq:error} is instantiated once per agent $i$, using that agent's own predicted and realized state to form $e_k^{(i)}$, $\bar e_k^{(i)}$, $y_k^{(i)}$; the single-agent notation in this section should be read as the per-agent instance with the superscript suppressed.
+
+\subsubsection{Deriving the confidence update law}
+\label{sec:confidence-law}
+
+\textcolor{red}{We define the \emph{confidence state} $c_k \in [0,1]$ as the ego's current belief in how reliable the predictive model $\hat f$ is for that specific agent at time $k$: $c_k$ near $1$ means recent predictions have matched the agent's actual behavior and the model is trusted; $c_k$ near $0$ means recent predictions have been unreliable and the model is distrusted.} Rather than positing an update law for $c_k$, we define it as the solution of an estimation problem. Given $c_k$ and new evidence $y_k$, define
+\begin{equation}
+J_k(c) \;=\; w_1\,(c-c_k)^2 \;+\; w_2\,(c-y_k)^2 \;+\; w_3\, c^2, \label{eq:Jk}
+\end{equation}
+a \emph{prior-anchor} term penalizing departure from the previous belief, a \emph{data-fit} term penalizing departure from new evidence, and a \emph{confidence-decay} term pulling toward $c=0$, encoding that absent reinforcing evidence, confidence should relax toward the most conservative state. Treating $c$ as receiving three independent Gaussian pseudo-measurements ($c\sim\mathcal N(c_k,\sigma_1^2)$, $c\sim\mathcal N(y_k,\sigma_2^2)$, $c\sim\mathcal N(0,\sigma_3^2)$), the product of likelihoods is proportional to $\exp(-\tfrac12 J_k(c))$ with $w_i=1/\sigma_i^2$, so minimizing $J_k$ is \textcolor{red}{maximum a posteriori (MAP)} estimation under this three-source model. The decay term gives well-defined, safety-consistent behavior when an agent is temporarily unobserved: without it a two-source filter cannot walk $c$ down and simply retains its last value, whereas $w_3>0$ relaxes $c$ toward the conservative floor from the passage of time alone, and allows the anchor and data-fit weights to be chosen independently, enabling the asymmetric erosion-versus-recovery gains used in Section~\ref{sec:sim}.
+
+\begin{proposition}[Derivation of the Confidence Update Law]
+\label{prop:derivation}
+Let $w_1=1-\beta$, $w_2=\alpha$, $w_3=\beta-\alpha$ for gains $\alpha,\beta$ with $0\le\alpha\le\beta\le1$. Then:
+\begin{enumerate}
+\item[(a)] $w_1+w_2+w_3=1$ for all such $\alpha,\beta$, and $w_1,w_2,w_3\ge0$ iff $\alpha\le\beta$; under this condition $J_k$ admits a MAP interpretation with $w_1,w_2,w_3$ as relative precisions of pseudo-observations $c_k$, $y_k$, $0$.
+\item[(b)] $J_k$ is strictly convex in $c$ for any real $\alpha,\beta$, with $J_k''(c)=2$.
+\item[(c)] The unique minimizer of $J_k$ is
+\begin{equation}
+c_{k+1} \;=\; \arg\min_{c\in\mathbb R} J_k(c) \;=\; (1-\beta)c_k+\alpha y_k, \label{eq:conf-update}
+\end{equation}
+with $\operatorname{sat}_{[0,1]}(c_{k+1})\in[0,1]$ the constrained estimate.
+\end{enumerate}
+\end{proposition}
+\begin{proof}
+(a) $w_1+w_2+w_3=(1-\beta)+\alpha+(\beta-\alpha)=1$ regardless of $\alpha,\beta$. Each $w_i\ge0$ requires $1-\beta\ge0,\alpha\ge0,\beta-\alpha\ge0$, i.e.\ the stated conditions; under nonnegative weights summing to one, $J_k(c)=\sum_i w_i(c-m_i)^2$, $(m_1,m_2,m_3)=(c_k,y_k,0)$, is the negative log-posterior of $c$ under three independent Gaussian pseudo-observations with precisions $\propto w_i$.
+(b) Expand $J_k(c)=(w_1+w_2+w_3)c^2-2(w_1c_k+w_2y_k)c+\text{const}=c^2-2(w_1c_k+w_2y_k)c+\text{const}$ using part (a); this holds algebraically for any real $\alpha,\beta$. Leading coefficient $1>0$ gives strict convexity with curvature $2$.
+(c) $J_k'(c)=2c-2(w_1c_k+w_2y_k)=0$ gives $c=w_1c_k+w_2y_k=(1-\beta)c_k+\alpha y_k$, matching \eqref{eq:conf-update} after substituting $y_k=1-\bar e_k$.
+\end{proof}
+
+Part (a) gives an independent justification for $\alpha\le\beta$, used for stability in Lemma~\ref{lem:convergence}: it is exactly the condition under which the estimator is a legitimate nonnegative-weighted MAP estimate rather than one with a negatively-weighted, destabilizing pseudo-observation. Assumption~\ref{ass:gains} below additionally requires $\beta<2$; this is strictly weaker than $\beta\le1$ on the region where Proposition~\ref{prop:derivation}(a) holds ($\beta\le1$), so every gain pair admissible for the MAP interpretation is automatically admissible for the convergence result of Lemma~\ref{lem:convergence}. The wider $\beta<2$ range in Assumption~\ref{ass:gains} is stated for generality,  it is the exact stability threshold of the linear recursion \eqref{eq:conf-update} viewed on its own, independent of the MAP reading,  but all gains used in Section~\ref{sec:sim} satisfy the tighter $\beta\le1$ bound, so both readings coincide in the reported experiments.
+Augmenting the plant with this confidence estimate gives the \emph{confidence-augmented system} $X_k=(x_k,c_k)$:
+\begin{equation}
+\begin{aligned}
+x_{k+1} &= f(x_k,u_k) + w_k, \\
+c_{k+1} &= \operatorname{sat}_{[0,1]}\!\big((1-\beta)c_k+\alpha y_k(x_k,\hat x_{k\mid k-1})\big),
+\end{aligned}
+\label{eq:augmented}
+\end{equation}
+with $c_k$ entering the dynamics only via the constraint set defined next. With the Confidence Update block of Fig.~\ref{fig:framework_overview} now in hand, we turn to the Risk Modulation block that consumes it.
+
+\subsubsection{From confidence to risk}
+\label{sec:confidence-risk}
+
+We replace the fixed budget $\delta$ in \eqref{eq:cc-classical} with
+\begin{equation}
+\delta(c) = \delta_{\min} + (\delta_{\max}-\delta_{\min})\big(1-e^{-\lambda c}\big), \qquad \lambda>0, \label{eq:delta-of-c}
+\end{equation}
+$0<\delta_{\min}<\delta_{\max}<1$, monotonically increasing in $c$: low confidence forces a small admissible violation probability, high confidence permits a larger one, directly addressing D1 by making the risk level itself a function of the trust the ego currently places in $\hat f$ for that agent. The exponential-saturating form is chosen for two properties beyond monotonicity: it is bounded within $[\delta_{\min},\delta_{\max}]$ for all $c\in[0,1]$ without an explicit clamp, and its derivative $\delta'(c)=(\delta_{\max}-\delta_{\min})\lambda e^{-\lambda c}$ is largest near $c=0$, so the admissible risk responds most sensitively exactly when confidence is lowest and safety matters most; any smooth, monotone, saturating family with this property (e.g.\ a logistic curve) would serve the same role, and we do not claim the exponential form is uniquely optimal, only a convenient calibratable choice. This gives the confidence-modulated chance constraint
+\begin{equation}
+\Pr\big(g(x_{k+j},u_j)\le0\big) \ge 1-\delta(c_k), \qquad j=1,\dots,N, \label{eq:cc-adaptive}
+\end{equation}
+with $c_k$ frozen at the current sampling instant, as standard for exogenous receding-horizon parameters.
+To turn \eqref{eq:cc-adaptive} into a constraint the MPC can actually enforce, write $g(x,u)=d_{\min}-h(x,u)$ for a scalar margin $h$. Suppose the one-step residual of $h$ conditioned on $c_k$ is zero-mean with variance bounded by
+\begin{equation}
+\sigma_{\mathrm{eff}}(c) = \sigma_0\big(1+\kappa(1-c)\big), \qquad \kappa \ge 0. \label{eq:sigma-eff}
+\end{equation}
+This affine-in-$(1-c)$ form is the simplest monotone interpolation between a best-case spread $\sigma_0$ at $c=1$ and a worst-case spread $\sigma_0(1+\kappa)$ at $c=0$, with $\kappa$ a single interpretable knob for how much the model's positional uncertainty can grow under full mistrust; Section~\ref{sec:sensitivity} shows the resulting back-off is not sensitive to moderate retuning of $\kappa$ around its nominal value. As formalized in Assumption~\ref{ass:calibration} and discussed in Remark~\ref{rem:calibration}, \eqref{eq:sigma-eff} is a design/calibration input supplied by the system integrator, analogous to choosing $\delta$ in classical fixed-risk CC-MPC. Cantelli's inequality gives, for any $b>0$, $\Pr\big(h(x,u) < d_{\min}+b - \sigma_{\mathrm{eff}}(c)\sqrt{(1-\delta(c))/\delta(c)}\big) \le \delta(c)$. Choosing the back-off
+\begin{equation}
+\rho(c) = \sigma_{\mathrm{eff}}(c)\sqrt{\dfrac{1-\delta(c)}{\delta(c)}} \label{eq:backoff}
+\end{equation}
+and imposing $h(x,u)\ge d_{\min}+\rho(c_k)$ guarantees \eqref{eq:cc-adaptive} (Theorem~\ref{thm:cc}, proved once we reach Section~\ref{sec:theory}). Since $\delta(\cdot)$ is increasing and $\sigma_{\mathrm{eff}}(\cdot)$ decreasing in $c$, $\rho(\cdot)$ is non-increasing in $c$; this fact, established later as Theorem~\ref{thm:feasible}, drives both the feasible-set nesting used for recursive feasibility and the sign of the bias in Section~\ref{sec:bias}. Define the \emph{confidence-modulated feasible set} $\mathcal X_f(c) := \{(x,u) : h(x,u) \ge d_{\min}+\rho(c)\}$, the object Section~\ref{sec:theory} reasons about directly.
+
+\begin{remark}[Scope of the Safety Guarantee]
+\label{rem:calibration}
+Theorems~\ref{thm:cc}--\ref{thm:optimal-allocation} hold conditional on Assumption~\ref{ass:calibration}: $\sigma_{\mathrm{eff}}(c_k)$ must be a correct upper bound on the true conditional residual variance at every $k$. This conditional structure is shared with any Cantelli/Chebyshev-based CC-MPC guarantee, including the fixed-$\delta$ baselines compared against in Section~\ref{sec:sim}; what is specific here is that the calibration burden shifts from one constant to a curve $\sigma_{\mathrm{eff}}(\cdot)$. This curve is a design input, not fit to residual data in the present experiments,  a post-hoc calibration against logged $(c_k,\eta_k)$ pairs (e.g.\ via conformal methods) is the natural next step, discussed further in Section~\ref{sec:limitations}. \textcolor{red}{The scalars $\sigma_0$ and $\kappa$ are now set from published nuScenes constant-velocity residuals (Section~\ref{sec:public-protocol}).} The zero-violation results of Section~\ref{sec:sim} are evidence consistent with Assumption~\ref{ass:calibration} on the tested scenarios, not a validation of it.
+\end{remark}
+
+Before checking that this back-off actually keeps the loop safe, it is worth pausing to ask what \eqref{eq:backoff} really buys us beyond tractability, which the next proposition answers.
+
+\begin{proposition}[Distributionally Robust Reformulation]
+\label{prop:dro}
+Let $\mathcal P(c)$ be the moment-based ambiguity set of distributions for the residual $\eta=h-\mathbb E[h]$ with zero mean and variance at most $\sigma_{\mathrm{eff}}(c)^2$,
+\begin{equation}
+\mathcal P(c) := \big\{P : \mathbb E_P[\eta]=0,\ \operatorname{Var}_P(\eta)\le\sigma_{\mathrm{eff}}(c)^2\big\}. \label{eq:ambiguity}
+\end{equation}
+Then $\rho(c)$ is the tightest deterministic margin $t\ge0$ satisfying
+\begin{equation}
+\sup_{P\in\mathcal P(c)} \Pr\nolimits_P\big(\eta\le -t\big) \;\le\; \delta(c). \label{eq:dro-cc}
+\end{equation}
+\end{proposition}
+\begin{proof}
+Cantelli's inequality is tight: for zero-mean $\eta$ with $\operatorname{Var}(\eta)=\sigma^2$ and $t>0$, $\sup_{P}\Pr_P(\eta\le-t)=\sigma^2/(\sigma^2+t^2)$, attained by a two-point distribution on $\{-\sigma^2/t,t\}$. Since $\operatorname{Var}_P(\eta)\le\sigma_{\mathrm{eff}}(c)^2$ and $\sigma^2/(\sigma^2+t^2)$ is non-decreasing in $\sigma^2$, the supremum over $\mathcal P(c)$ equals $\sigma_{\mathrm{eff}}(c)^2/(\sigma_{\mathrm{eff}}(c)^2+t^2)$. Setting this to $\delta(c)$ gives $t=\sigma_{\mathrm{eff}}(c)\sqrt{(1-\delta(c))/\delta(c)}=\rho(c)$, with equality at $t=\rho(c)$, so no smaller $t$ satisfies \eqref{eq:dro-cc}.
+\end{proof}
+
+The back-off already needed for tractability is thus exactly the solution of a moment-based DRO chance constraint whose ambiguity radius $\sigma_{\mathrm{eff}}(c)^2$ is confidence-dependent: $c$ parameterizes the size of the ambiguity set the planner is robust against, shrinking as evidence accumulates that the predictive model is locally valid. With the Confidence Update and Risk Modulation blocks of Fig.~\ref{fig:framework_overview} both defined, the next section asks the question a designer should ask before trusting either one: does closing the loop around them actually preserve safety, feasibility, and stability?
+
+\subsection{Does the Loop Stay Safe? Theoretical Guarantees}
+\label{sec:theory}
+
+This section checks the confidence-adaptive loop of Fig.~\ref{fig:framework_overview} against three questions, in the order a skeptical reader would ask them. Does the confidence state itself behave sensibly over time (Section~\ref{sec:theory-convergence})? Does freezing $c_k$ at each step and tightening by $\rho(c_k)$ actually deliver the chance constraint we set out to satisfy, and does the resulting receding-horizon controller remain feasible and stable (Sections~\ref{sec:theory-convergence}--\ref{sec:feasibility})? And what happens if, instead of following the deployed loop, one is tempted to let the MPC choose $c_k$ itself (Section~\ref{sec:bias}, resolving D3)?
+
+\subsubsection{Convergence, safety, and monotonicity}
+\label{sec:theory-convergence}
+
+\begin{assumption}[Admissible Gains]
+\label{ass:gains}
+$0<\beta<2$ and $0<\alpha\le\beta\le1$.
+\end{assumption}
+
+We first check that the Confidence Update block itself is well-behaved: does $c_k$ settle down to a sensible value if the evidence stops changing, or can it drift or oscillate?
+
+\begin{lemma}[Confidence Convergence]
+\label{lem:convergence}
+Let Assumption~\ref{ass:gains} hold and $y_k \to y^\infty\in [0,1]$. Then $\{c_k\}$ from \eqref{eq:conf-update} converges to $c^\star = \alpha y^\infty/\beta \in[0,1]$.
+\end{lemma}
+\begin{proof}
+Fix $y_k\equiv y^\infty$ first. Then \eqref{eq:conf-update} is $c_{k+1}=T(c_k):=(1-\beta)c_k+\alpha y^\infty$, with fixed point $c^\star=(\alpha/\beta)y^\infty\in[0,1]$ since $0\le\alpha/\beta\le1$, $y^\infty\in[0,1]$. As $0<\beta<2$, $|1-\beta|<1$, so $T$ is a contraction and $c_k\to c^\star$ by Banach.
+
+For general $y_k\to y^\infty$, let $\varepsilon_k:=c_k-c^\star$. Subtracting the fixed-point identity from the recursion gives $\varepsilon_{k+1}=(1-\beta)\varepsilon_k+\alpha(y_k-y^\infty)$, unrolling to $\varepsilon_k=(1-\beta)^k\varepsilon_0+\alpha\sum_{i=0}^{k-1}(1-\beta)^{k-1-i}(y_i-y^\infty)$. The first term vanishes as $|1-\beta|<1$. For the sum, fix $\epsilon>0$, choose $I$ with $|y_i-y^\infty|<\epsilon$ for $i\ge I$; the early terms are damped by $|1-\beta|^{k-1-i}\to0$, while the tail is bounded by $\alpha\epsilon/(1-|1-\beta|)$. Since $\epsilon$ arbitrary, $\varepsilon_k\to0$. As $\operatorname{sat}_{[0,1]}(\cdot)$ is $1$-Lipschitz and fixes $c^\star\in[0,1]$, the saturated sequence converges to the same limit.
+\end{proof}
+
+Next, we check the Risk Modulation block on its own terms: does enforcing the back-off $\rho(c_k)$ from a single, frozen confidence value actually deliver the confidence-modulated chance constraint \eqref{eq:cc-adaptive}?
+
+\begin{assumption}[Local Uncertainty Calibration]
+\label{ass:calibration}
+Conditioned on $c_k$, the one-step residual of $h$ is zero-mean with variance $\le\sigma_{\mathrm{eff}}(c_k)^2$ as in \eqref{eq:sigma-eff} (see Remark~\ref{rem:calibration}).
+\end{assumption}
+
+\begin{theorem}[Adaptive Chance-Constraint Satisfaction]
+\label{thm:cc}
+Let Assumption~\ref{ass:calibration} hold and $\rho(\cdot)$ be as in \eqref{eq:backoff}. If $h(x_{k+j},u_j) \ge d_{\min}+\rho(c_k)$ for $j=1,\dots,N$, then \eqref{eq:cc-adaptive} holds at time $k$.
+\end{theorem}
+\begin{proof}
+Fix $j$, abbreviate $\sigma:=\sigma_{\mathrm{eff}}(c_k)$, $\delta:=\delta(c_k)$, $\rho:=\rho(c_k)$. Let $\eta:=h(x_{k+j},u_j)-\mathbb E[h(x_{k+j},u_j)]$, zero-mean with $\operatorname{Var}(\eta)\le\sigma^2$. Cantelli gives $\Pr(\eta\le-t)\le\sigma^2/(\sigma^2+t^2)$ for any $t>0$. Since $\mathbb E[h]\ge d_{\min}+\rho$, $\{h<d_{\min}\}\subseteq\{\eta\le-\rho\}$, so $\Pr(h<d_{\min})\le\sigma^2/(\sigma^2+\rho^2)$. By construction $\rho^2=\sigma^2(1-\delta)/\delta$, so $\sigma^2+\rho^2=\sigma^2/\delta$ and $\sigma^2/(\sigma^2+\rho^2)=\delta$, giving $\Pr(h(x_{k+j},u_j)<d_{\min})\le\delta(c_k)$, i.e.\ \eqref{eq:cc-adaptive} for every $j$.
+\end{proof}
+
+Having confirmed per-step safety, we next ask how the feasible region moves as confidence changes, since this is what will let us bound the adaptive controller between two fixed-tightening controllers in Section~\ref{sec:feasibility}.
+
+\begin{theorem}[Feasible Set Monotonicity]
+\label{thm:feasible}
+If $c_1 \le c_2$, then $\mathcal X_f(c_1) \subseteq \mathcal X_f(c_2)$.
+\end{theorem}
+\begin{proof}
+$\delta'(c)=(\delta_{\max}-\delta_{\min})\lambda e^{-\lambda c}>0$, so $\delta(\cdot)$ is strictly increasing; $\sigma_{\mathrm{eff}}(c)=\sigma_0(1+\kappa)-\sigma_0\kappa c$ is non-increasing. Write $\rho(c)=\sigma_{\mathrm{eff}}(c)\,q(\delta(c))$, $q(\delta):=\sqrt{(1-\delta)/\delta}$; since $1/\delta-1$ is strictly decreasing, $q(\cdot)$ is strictly decreasing, so $q(\delta(c))$ is strictly decreasing in $c$. Thus $\rho(c)$, a product of two non-negative, non-increasing factors, is non-increasing: $c_1\le c_2 \Rightarrow \rho(c_1)\ge\rho(c_2)$, so $d_{\min}+\rho(c_1)\ge d_{\min}+\rho(c_2)$ and $\mathcal X_f(c_1)\subseteq\mathcal X_f(c_2)$.
+\end{proof}
+
+\subsubsection{Recursive feasibility, practical stability, performance}
+\label{sec:feasibility}
+
+We can now assemble Theorems~\ref{thm:cc}--\ref{thm:feasible} into closed-loop guarantees. Since $c_k\in[0,1]$, Theorem~\ref{thm:feasible} implies
+\begin{equation}
+\mathcal X_f(0) \;\subseteq\; \mathcal X_f(c_k) \;\subseteq\; \mathcal X_f(1) \qquad \forall k, \label{eq:sandwich}
+\end{equation}
+with $\rho_{\max}:=\rho(0)$, $\rho_{\min}:=\rho(1)$ the worst/best-case back-offs. This sandwich is the key device for the rest of this subsection: it lets us borrow feasibility and stability results directly from a constant-tightening baseline that a designer would already know how to certify.
+
+\begin{corollary}[Recursive Feasibility]
+\label{cor:feasibility}
+If the fixed-tightening MPC (constant back-off $\rho_{\max}$ in Algorithm~\ref{alg:main}) is recursively feasible in the standard sense (terminal set/cost per \cite{rawlings2020model}), then Algorithm~\ref{alg:main} is recursively feasible for every realization $c_k\in[0,1]^{\mathbb N}$.
+\end{corollary}
+\begin{proof}
+By \eqref{eq:sandwich}, $\rho_{\max}\ge\rho(c_k)$ for every $c_k\in[0,1]$. Any control sequence feasible for the constant-$\rho_{\max}$ problem satisfies $h\ge d_{\min}+\rho_{\max}\ge d_{\min}+\rho(c_k)$, hence remains feasible for the weakly less restrictive constraint actually enforced. A feasible trajectory therefore exists at every step for every $\{c_k\}$.
+\end{proof}
+
+\begin{corollary}[Practical Stability]
+\label{cor:stability}
+If the fixed-tightening MPC of Corollary~\ref{cor:feasibility} has standard stabilizing terminal ingredients so that $x$ converges to a $\rho_{\max}$-scaled neighborhood of its target set \cite{rawlings2020model}, then under Lemma~\ref{lem:convergence} the confidence-augmented system \eqref{eq:augmented} is practically stable: $c_k\to c^\star$ while $x_k$ remains at every step in the closed-loop tube of the recursively feasible, stabilizing fixed-tightening controller.
+\end{corollary}
+\begin{proof}
+By Corollary~\ref{cor:feasibility} and \eqref{eq:sandwich}, the confidence-adaptive optimal cost is bounded above by the fixed-tightening cost at every state, so the terminal-ingredient Lyapunov argument transfers directly and $x_k$ remains in the certified tube. Independently, Lemma~\ref{lem:convergence} gives $c_k\to c^\star$ whenever $y_k$ converges; the two subsystems couple only through $c_k$ entering the tightening on $x$, so $c_k$ converges to $c^\star$ while $x_k$ stays inside the certified tube regardless of the realized confidence trajectory, since $\rho(c_k)\le\rho_{\max}$ always.
+\end{proof}
+
+Feasibility and stability tell us the loop does not break; the next result tells us it is also worth running, by comparing its cost against a fixed-risk baseline that happens to bound the adaptive scheme from below.
+
+\begin{proposition}[Conditional Performance Dominance]
+\label{prop:dominance}
+Let $J^\star_\rho(x)$ be the optimal value of the fixed-back-off-$\rho$ MPC at $x$, well defined for $\rho\in[\rho_{\min},\rho_{\max}]$. If $\delta_{\mathrm{fix}}\le\delta_{\min}$, then $\mathcal X_f(\delta_{\mathrm{fix}}) \subseteq \mathcal X_f(c_k)$ for every $c_k\in[0,1]$, and
+\begin{equation}
+J^\star_{\rho(c_k)}(x) \;\le\; J^\star_{\rho_{\mathrm{fix}}}(x) \qquad \forall x,\ \forall k. \label{eq:dominance}
+\end{equation}
+The symmetric statement ($\delta_{\mathrm{fix}}\ge\delta_{\max}$, reversed) holds analogously.
+\end{proposition}
+\begin{proof}
+Since $\delta(c)\ge\delta_{\min}$ for all $c\in[0,1]$ (Theorem~\ref{thm:feasible}), $\delta_{\mathrm{fix}}\le\delta_{\min}\le\delta(c_k)$. As $t\mapsto\sqrt{(1-t)/t}$ is strictly decreasing, $\delta_{\mathrm{fix}}\le\delta(c_k)$ implies $\rho_{\mathrm{fix}}\ge\rho(c_k)$, so $\mathcal X_f(\delta_{\mathrm{fix}})\subseteq\mathcal X_f(c_k)$. Minimizing the same objective over a superset feasible region cannot increase the optimum, giving \eqref{eq:dominance}. The case $\delta_{\mathrm{fix}}\ge\delta_{\max}$ reverses every inequality.
+\end{proof}
+
+Proposition~\ref{prop:dominance} does not apply to the fixed-$\delta=0.05$ baselines in Section~\ref{sec:sim}, since $\delta_{\min}=0.01<0.05<0.20=\delta_{\max}$: the scenarios are deliberately constructed so the adaptive controller is sometimes more, sometimes less conservative than the fixed baseline.
+
+\subsubsection{The endogenous confidence bias}
+\label{sec:bias}
+
+Everything above certifies the loop of Fig.~\ref{fig:framework_overview} exactly as drawn, with confidence estimated \emph{outside} the MPC and then frozen for the solve. It is tempting to instead fold confidence estimation into the MPC itself, treating $c$ as one more decision variable the optimizer can adjust alongside the control input; D3 asks whether this shortcut is safe. Consider jointly optimizing $c$ with the control sequence:
+\begin{equation}
+\begin{aligned}
+(\mathrm P_{\mathrm{naive}}):\quad \min_{c\in[0,1],\,u_{0:N-1}} \ & \ell(u_{0:N-1}) + (c-\hat c_k)^2 \\
+\text{s.t.}\ & h(x_k,u_{0:N-1}) \ge d_{\min}+\rho(c),
+\end{aligned}
+\label{eq:naive}
+\end{equation}
+where $\hat c_k:=(1-\beta)c_k+\alpha y_k$ is the estimation-optimal value. We reserve the label $(\mathrm P_{\mathrm{naive}})$ exclusively for this joint optimization problem; the unrelated uncalibrated reactive baseline used later in Section~\ref{sec:montecarlo} is named \emph{myopic-reactive} to avoid any confusion between the two.
+
+\begin{theorem}[Endogenous Confidence Bias]
+\label{thm:bias}
+Let $\rho\in C^1([0,1])$, $\rho'(c)\le0$. If $(\mathrm P_{\mathrm{naive}})$ has a KKT point $(c_k^\star,u_k^\star)$ with $c_k^\star\in(0,1)$, the safety constraint active with multiplier $\mu_k\ge0$, and constraint qualification holds, then
+\begin{equation}
+c_k^\star = \hat c_k - \frac{\mu_k}{2}\rho'(c_k^\star), \label{eq:bias}
+\end{equation}
+so $c_k^\star \ge \hat c_k$, strictly whenever $\mu_k>0$ and $\rho'(c_k^\star)<0$.
+\end{theorem}
+\begin{proof}
+Write the active constraint $\phi(c,u):=\rho(c)-h(x_k,u)+d_{\min}\le0$, $\phi(c_k^\star,u_k^\star)=0$, multiplier $\mu_k\ge0$. The $c$-dependent part of the Lagrangian is $(c-\hat c_k)^2+\mu\phi(c,u)$. At the interior $c_k^\star\in(0,1)$, stationarity gives $2(c_k^\star-\hat c_k)+\mu_k\rho'(c_k^\star)=0$, i.e.\ \eqref{eq:bias}. Since $\rho'(c_k^\star)\le0$, $\mu_k\ge0$, the term $-\tfrac{\mu_k}{2}\rho'(c_k^\star)\ge0$, giving $c_k^\star\ge\hat c_k$, strict iff both factors are strictly nonzero.
+\end{proof}
+
+Jointly optimizing confidence with control thus creates a structural incentive to overstate confidence precisely when doing so relaxes a binding safety constraint, confirming that D3's concern was well founded. Theorem~\ref{thm:bias} is an analytical result: it characterizes any KKT point of $(\mathrm P_{\mathrm{naive}})$ without requiring us to solve $(\mathrm P_{\mathrm{naive}})$ numerically. \textcolor{red}{Section~\ref{sec:thm3-eval} now instantiates $(\mathrm P_{\mathrm{naive}})$ on the paper's $\rho(\cdot)$ via a $2001$-point grid, verifies \eqref{eq:bias} to numerical precision, and evaluates the trust-region patch of Corollary~\ref{cor:patch} on the Scenario~A operating interval.}
+
+\begin{corollary}[Trust-Region Safety Patch]
+\label{cor:patch}
+If $|\rho'(c)|\le L$ on $[0,1]$ and $\mu_k\le\mu_{\max}$, then $|c_k^\star-\hat c_k|\le\Delta:=\mu_{\max}L/2$; since $\rho$ is non-increasing, enforcing $h\ge d_{\min}+\rho(\hat c_k+\Delta)$ is at least as conservative as $h\ge d_{\min}+\rho(c_k^\star)$, so Theorem~\ref{thm:cc} applies at the deterministic point $\hat c_k+\Delta$ and safety is restored regardless of the realized bias.
+\end{corollary}
+
+Endogenous adaptation can thus be made safe, but only by paying with a strictly more conservative $\rho(\hat c_k+\Delta)\le\rho(\hat c_k)$. This is exactly why Fig.~\ref{fig:framework_overview} draws confidence estimation as a block feeding into, rather than living inside, the MPC solve: the deployed system sets $c_k=\hat c_k$ directly ($\Delta=0$), sidestepping $(\mathrm P_{\mathrm{naive}})$ and its bias altogether rather than patching it online.
+
+\subsection{Scaling to a Scene: Confidence-Weighted Risk Allocation}
+\label{sec:multiagent}
+
+The loop analyzed above tracks a single agent's confidence. However, a realistic scene has several safety-critical agents at once, each with its own, generally diverging, trustworthiness. We now add the missing Risk Allocation step of Fig.~\ref{fig:framework_overview}: each agent $i\in\{1,\dots,M\}$ runs its own copy of the Prediction/Evidence and Confidence Update blocks, producing an independent confidence state $c_k^{(i)}$ via Proposition~\ref{prop:derivation} on its own evidence $y_k^{(i)}$ obtained by instantiating \eqref{eq:error} per agent, with margin $h^{(i)}(x,u)\ge d_{\min}^{(i)}$; $c_k=(c_k^{(1)},\dots,c_k^{(M)})\in[0,1]^M$. What remains is how a single scene-level risk budget should be split across these $M$ independent confidence states.
+
+\begin{proposition}[Confidence-Weighted Risk Allocation]
+\label{prop:allocation}
+Fix a scene-level budget $\delta_{\mathrm{total}}\in(0,1)$. With per-agent nominal risk $\delta(c_k^{(i)})$ from \eqref{eq:delta-of-c}, define
+\begin{equation}
+\tilde\delta_k^{(i)} \;=\; \delta_{\mathrm{total}}\cdot\frac{\delta(c_k^{(i)})}{\sum_{j=1}^M \delta(c_k^{(j)})}, \qquad i=1,\dots,M. \label{eq:allocation}
+\end{equation}
+Then $\sum_i \tilde\delta_k^{(i)}=\delta_{\mathrm{total}}$ exactly, and if the MPC enforces $h^{(i)}(x,u)\ge d_{\min}^{(i)}+\tilde\rho(c_k^{(i)})$ for every $i$ ($\tilde\rho(\cdot)$ = \eqref{eq:backoff} with $\tilde\delta_k^{(i)}$ in place of $\delta(c_k^{(i)})$), then
+\begin{equation}
+\Pr\Big(\exists\, i: g^{(i)}(x,u)>0\Big) \;\le\; \delta_{\mathrm{total}}. \label{eq:whole-scene}
+\end{equation}
+\end{proposition}
+\begin{proof}
+$\sum_i\tilde\delta_k^{(i)}=\delta_{\mathrm{total}}\sum_i\delta(c_k^{(i)})/\sum_j\delta(c_k^{(j)})=\delta_{\mathrm{total}}$. Theorem~\ref{thm:cc}'s proof applies verbatim per agent with $\delta(c_k)$ replaced by $\tilde\delta_k^{(i)}$, giving $\Pr(g^{(i)}(x,u)>0)\le\tilde\delta_k^{(i)}$ for each $i$, each conditioned on Assumption~\ref{ass:calibration} holding for that agent's residual (Remark~\ref{rem:calibration}). Boole's inequality gives $\Pr(\exists i:g^{(i)}>0)\le\sum_i\tilde\delta_k^{(i)}=\delta_{\mathrm{total}}$.
+\end{proof}
+
+Allocation~\eqref{eq:allocation} generalizes the uniform risk-splitting default in classical multi-constraint CC-MPC and the iterative horizon-wise reallocation of \cite{ono2008iterative}: here reallocation is across \emph{agents} at fixed horizon step, and is a closed-form function of the same confidence estimates already computed for the single-agent case, not a heuristic descent update. It is natural to ask whether \eqref{eq:allocation} is simply a convenient closed form or the "right" split of the budget in some formal sense; the next result answers this.
+
+\begin{theorem}[Optimal Risk Allocation]
+\label{thm:optimal-allocation}
+Among allocations $\delta^{(i)}> 0$, $\sum_i\delta^{(i)}=\delta_{\mathrm{total}}$, the confidence-weighted allocation~\eqref{eq:allocation} is the unique minimizer of the generalized KL divergence to $m^{(i)}:=\delta(c_k^{(i)})$,
+\begin{equation}
+D(\delta\,\|\,m) \;=\; \sum_{i=1}^M \Big[\delta^{(i)}\ln\frac{\delta^{(i)}}{m^{(i)}} - \delta^{(i)} + m^{(i)}\Big], \label{eq:kl}
+\end{equation}
+subject to $\sum_i\delta^{(i)}=\delta_{\mathrm{total}}$.
+\end{theorem}
+\begin{proof}
+$m^{(i)}\ge\delta_{\min}>0$; $f_i(\delta^{(i)}):=\delta^{(i)}\ln(\delta^{(i)}/m^{(i)})-\delta^{(i)}+m^{(i)}$ has $f_i''=1/\delta^{(i)}>0$, so $D=\sum_i f_i$ is strictly convex on $(0,\infty)^M$. The constraint set is convex and nonempty, so a unique minimizer exists. The Lagrangian $\mathcal L=D-\lambda(\sum_i\delta^{(i)}-\delta_{\mathrm{total}})$ gives stationarity $\ln(\delta^{(i)}/m^{(i)})-\lambda=0$, i.e.\ $\delta^{(i)}=m^{(i)}e^{\lambda}$. The budget constraint gives $e^{\lambda}=\delta_{\mathrm{total}}/\sum_j m^{(j)}$, hence $\delta^{(i)}=m^{(i)}\delta_{\mathrm{total}}/\sum_j m^{(j)}=\tilde\delta_k^{(i)}$, matching \eqref{eq:allocation}, unique and sufficient by strict convexity.
+\end{proof}
+
+Theorem~\ref{thm:optimal-allocation} gives \eqref{eq:allocation} the interpretation of an information projection: the minimal-distortion way to enforce a hard scene-level budget on top of the per-agent confidence estimates, closing the last gap (D4) in Fig.~\ref{fig:framework_overview}.
+
+\subsection{Assembling the Loop: Receding-Horizon Algorithm}
+\label{sec:alg}
+
+With every block of Fig.~\ref{fig:framework_overview} now derived and certified, Algorithm~\ref{alg:main} simply runs them in sequence at every time step, exactly as the loop is drawn.
+
+\begin{algorithm}[t]
+\caption{Confidence-State Adaptive CC-MPC}
+\label{alg:main}
+\begin{algorithmic}[1]
+
+\State \textbf{Initialize:} $x_0$, $c_0 \in [0,1]$, gains $\alpha,\beta,\lambda,\kappa,\sigma_0$ satisfying Assumption~\ref{ass:gains}
+
+\For{$k=0,1,2,\dots$}
+
+  \State Measure $x_k$; compute $\bar e_k$, $y_k=1-\bar e_k$ from \eqref{eq:error} using $\hat x_{k\mid k-1}$ stored from the previous iteration \Comment{Prediction \& Evidence}
+
+  \State $c_k \leftarrow \operatorname{sat}_{[0,1]}\big((1-\beta)c_{k-1}+\alpha y_{k-1}\big)$ \Comment{Confidence Update, Prop.~\ref{prop:derivation}}
+
+  \State Compute $\delta(c_k)$, $\sigma_{\mathrm{eff}}(c_k)$, $\rho(c_k)$ via \eqref{eq:delta-of-c}--\eqref{eq:backoff} \Comment{Risk Modulation; $c_k=\hat c_k$, $(\mathrm P_{\mathrm{naive}})$ never solved}
+
+  \State Solve the CC-MPC problem and obtain the optimal control sequence.
+
+  \State Apply $u_0^\star$; store $\hat x_{k+1\mid k}=\hat f(x_k,u_0^\star)$ \Comment{closes the loop}
+
+\EndFor
+
+\end{algorithmic}
+\end{algorithm}
+
+Algorithm~\ref{alg:main} adds no online decision variables beyond the standard control sequence, since $c_k$ is closed-form (step 4): the confidence update and risk/back-off evaluation are $O(1)$ scalar computations, and step 5 retains exactly the structure and convexity of its fixed-$\delta$ counterpart. Steps 1--4 implement Proposition~\ref{prop:derivation} directly; $(\mathrm P_{\mathrm{naive}})$ (Section~\ref{sec:bias}) and its trust-region patch (Corollary~\ref{cor:patch}) are deliberately excluded from the deployed algorithm, kept in the paper purely as the analysis that motivates this simpler, unbiased-by-construction design. \textcolor{red}{Section~\ref{sec:thm3-eval} instantiates $(\mathrm P_{\mathrm{naive}})$ only as the diagnostic of that design.}
+
+The multi-agent extension requires no structural change to the loop of Fig.~\ref{fig:framework_overview}: steps 3--4 repeat per agent $i$; step 5 additionally computes $\tilde\delta_k^{(i)}$ via \eqref{eq:allocation} and $\tilde\rho(c_k^{(i)})$, adding one affine constraint per agent and no new decision variables,  an $O(M)$ growth in problem size, analytically identical in structure to adding $M$ ordinary tightened constraints to a fixed-$\delta$ multi-agent CC-MPC. We report wall-clock solver time for the single-agent Monte Carlo study (Table~\ref{tab:runtime}). Since the confidence update stays closed-form and the tightened constraint stays affine whenever $h$ is affine/convex in $(x,u)$, Algorithm~\ref{alg:main} preserves the MPC's convexity class exactly, unlike approaches embedding risk-level adaptation as an additional in-solve optimization variable.
+
+\section{Experiments: Three Urban Driving Scenarios}
+\label{sec:sim}
+
+We now run the loop of Fig.~\ref{fig:framework_overview} in a \textbf{custom-designed closed-loop simulation environment} to evaluate the proposed CC-MPC under three representative failure modes: Scenario~A, a sustained model mismatch caused by a braking cut-in vehicle; Scenario~B, a sudden discrete surprise caused by an occluded pedestrian revealed during the approach; and Scenario~C, a combination of both failure modes across two agents, stress-testing the Risk Allocation step of Section~\ref{sec:multiagent}. At each time step, the ego vehicle and surrounding agents are propagated forward, predictions and prediction errors are updated, the confidence-dependent risk and safety back-offs are computed, and the CC-MPC replans before the next control action is applied. All scenarios use the same confidence law (Prop.~\ref{prop:derivation}), $\delta(\cdot)$, $\sigma_{\mathrm{eff}}(\cdot)$, $\rho(\cdot)$, and deployed Algorithm~\ref{alg:main} with $c_k=\hat c_k$ ($\Delta=0$); only the agent behaviors, initial conditions, and scenario-specific safety geometry vary. Since these are custom-designed scenarios, we will release the simulation code, scenario configurations, and experiment scripts to facilitate reproducibility and allow reviewers and other researchers to inspect and extend the evaluated scenarios.
+
+{\color{red}
+\subsection{Public Scenario Protocol and nuScenes Residual Calibration}
+\label{sec:public-protocol}
+
+The closed-loop plant is a kinematic double integrator. That is the setting in which the CC-MPC certificates of Section~\ref{sec:theory} are stated, and it is the plant used by the literature baselines we reimplement. What is \emph{not} private is the event definition or the residual scale.
+
+Scenario~A is a highway cut-in whose braking intensity $3.5\,\mathrm{m/s^2}$ ($0.36g$) and speed range $15$--$22\,\mathrm{m/s}$ ($54$--$79\,\mathrm{km/h}$) lie in the NHTSA/ISO~34502 cut-in catalog \cite{nhtsa2018framework,iso34502}. Scenario~B matches the Euro~NCAP obstructed pedestrian AEB class \cite{euroncap2023aeb} at $v_0=12\,\mathrm{m/s}$ ($43\,\mathrm{km/h}$), with a $1.8\,\mathrm{s}$ time-to-conflict at reveal ($22\,\mathrm{m}$ gap). Scenario~C is an unsignalized two-conflict intersection of the class used in CommonRoad \cite{althoff2017commonroad}. Table~\ref{tab:public} records the mapping.
+
+The residual parameters $\sigma_0=1.0\,\mathrm{m}$ and $\kappa=0.6$ (hence $\sigma_{\mathrm{eff}}(0)=1.6\,\mathrm{m}$) are set from the published nuScenes constant-velocity final displacement error (FDE) of the same predictor class used here \cite{caesar2020nuscenes,salzmann2020trajectron++}: $0.89\,\mathrm{m}$ at the $2\,\mathrm{s}$ horizon of our MPC, and $1.70\,\mathrm{m}$ at $3\,\mathrm{s}$. Thus $\sigma_0$ covers the public $2\,\mathrm{s}$ CV residual, and $\sigma_{\mathrm{eff}}(0)$ covers the $3\,\mathrm{s}$ mismatch envelope. Trajectron++ on the same split reports a $2\,\mathrm{s}$ vehicle FDE of $0.45\,\mathrm{m}$ and a pedestrian FDE of $0.17\,\mathrm{m}$ \cite{salzmann2020trajectron++}, so the design envelope is conservative relative to a learned predictor on real urban logs. The Monte Carlo severe regime (deceleration up to $5\,\mathrm{m/s^2}$) probes residuals beyond that public envelope, which is why violations appear there for every method, including worst-case fixed.
+
+\begin{table}[t]
+\centering
+\caption{Public event protocol. Residual scale from nuScenes CV FDE \cite{salzmann2020trajectron++}.}
+\label{tab:public}
+\small
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{lll}
+\toprule
+Event & Public catalog class & Residual used to set $(\sigma_0,\kappa)$ \\
+\midrule
+A: cut-in & NHTSA/ISO 34502 cut-in, $0.36g$ & CV FDE $@2\,\mathrm{s}$: $0.89\,\mathrm{m}$ $\to$ $\sigma_0=1.0\,\mathrm{m}$ \\
+B: pedestrian & Euro NCAP obstructed AEB, $43\,\mathrm{km/h}$ & Ped.\ FDE $@2\,\mathrm{s}$: $0.17\,\mathrm{m}$ $\ll$ $\sigma_0$ \\
+C: intersection & CommonRoad unsignalized conflict & CV FDE $@3\,\mathrm{s}$: $1.70\,\mathrm{m}$ $\to$ $\sigma_{\mathrm{eff}}(0)=1.6\,\mathrm{m}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+}
+
+\subsection{Scenario A: Lane Change with a Braking Cut-In Vehicle}
+\label{sec:sim-lanechange}
+
+The ego executes a lane change into a lane occupied by a lead vehicle in a five-vehicle scene, with the target-lane leader being safety-critical. Ego dynamics follow a discrete-time double-integrator model $z=(x,v_x,y,v_y)$, $u=(a_x,a_y)$, with $T_s=0.2\,\mathrm{s}$ and $z_{k+1}=Az_k+Bu_k$, subject to $|a_x|\le2.5\,\mathrm{m/s^2}$, $|a_y|\le2.0\,\mathrm{m/s^2}$, and $|v_y|\le3.0\,\mathrm{m/s}$; $v_{x,0}=20\,\mathrm{m/s}$ and the target-lane offset is $3.6\,\mathrm{m}$. The leader is predicted using a constant-velocity model re-initialized at every MPC solve, while the true leader decelerates from $22$ to $15\,\mathrm{m/s}$ over $t\in[4,6]\,\mathrm{s}$, creating an unanticipated model mismatch. Safety is enforced through the margin $h=x_{\mathrm{lead}}-x_{\mathrm{ego}}$ with $d_{\min}=5\,\mathrm{m}$. We use $N=10$ ($2\,\mathrm{s}$ horizon), $\alpha=0.30$, $\beta=0.33$, $e_{\mathrm{norm}}=0.5\,\mathrm{m}$, $\delta_{\min}=0.01$, $\delta_{\max}=0.20$, $\lambda=3$, $\sigma_0=1.0\,\mathrm{m}$, and $\kappa=0.6$. The proposed confidence-adaptive CC-MPC is compared with a fixed-risk CC-MPC baseline using $\delta=0.05$ and the same $\sigma_0$; both controllers use the same scenario, vehicle dynamics, and noise realization and are implemented as convex QPs solved at every sampling step.
+
+
+Fig.~\ref{fig:confidence} shows the confidence state $c_k=\hat c_k$ together with the normalized prediction error, defined as the normalized discrepancy between the predicted and observed states of the surrounding agent. Since $c_k\in[0,1]$, values close to $1$ indicate high confidence in the prediction, while larger normalized prediction errors lead to lower confidence. In the braking scenario, the confidence starts close to $1$, drops when the vehicle undergoes unmodeled deceleration, and then recovers geometrically once the predictor re-synchronizes, as guaranteed by Lemma~\ref{lem:convergence}.
+
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/fig_confidence.pdf}
+\caption{Scenario A. Predictive confidence state $c_k=\hat c_k$ (left axis) and normalized one-step prediction error $\bar e_k$ (right axis). The confidence decreases in response to the unmodeled leader braking as prediction error increases, and subsequently recovers as the predictor re-synchronizes, illustrating the proposed method's ability to adapt the confidence state online to changing prediction reliability. Shading marks the unmodeled leader-braking event.}
+\label{fig:confidence}
+\end{figure}
+
+Fig.~\ref{fig:backoff} shows the adaptive back-off $\rho(c_k)$ relative to the fixed-$\delta$ baseline, with the adaptive value remaining below the baseline throughout the scenario; Fig.~\ref{fig:traj} compares the realized gap and lateral trajectory, with both controllers completing the lane change while maintaining a gap above $d_{\min}$ throughout.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/fig_backoff.pdf}
+\caption{Scenario A. Confidence-adaptive back-off $\rho(c_k)$ vs.\ the constant fixed-$\delta=0.05$ baseline. The adaptive back-off increases when prediction reliability degrades, providing additional safety margin during the unmodeled braking event.}
+\label{fig:backoff}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.92\linewidth]{figures/fig_traj.pdf}
+\caption{Scenario A. Top: longitudinal gap to the target-lane leader. Bottom: ego lateral position. Shading marks the braking event.}
+\label{fig:traj}
+\end{figure}
+
+During Scenario A, the confidence state varies over $c_k\in[0.49,0.87]$ as the predictor responds to the braking-induced model mismatch. Through the proposed confidence-to-risk mapping, this corresponds to $\delta(c_k)\in[0.157,0.186]$ and safety back-offs $\rho(c_k)\in[2.26,3.02]\,\mathrm{m}$. These ranges quantify how the method converts changes in prediction reliability into corresponding changes in the admissible risk and safety margin during the closed-loop maneuver. Thus, unlike the fixed-$\delta=0.05$ baseline, which operates at a single fixed risk level, the adaptive controller adjusts its conservatism in response to prediction reliability, providing greater safety margin during braking and relaxing it as the predictor re-synchronizes. This single scripted trajectory is a deterministic illustration of the mechanism, not a statistical test; the randomized version of the same scenario is reported in Section~\ref{sec:montecarlo}.
+
+
+\subsection{Scenario B: Occluded-Pedestrian Crosswalk Approach}
+\label{sec:sim-pedestrian}
+
+This tests the opposite failure mode: a brief, severe, one-shot surprise. The ego vehicle uses the same longitudinal double-integrator model as in Scenario~A, with state $z=(x,v)$ and control $u=a$, and approaches a crosswalk at $v_0=12\,\mathrm{m/s}$ ($\approx43\,\mathrm{km/h}$), with $|a|\le3.5\,\mathrm{m/s^2}$, $T_s=0.2\,\mathrm{s}$, and $N=10$. The normalized one-step prediction error $\bar e_k$, defined as the normalized discrepancy between the predicted and observed pedestrian state, spikes when the pedestrian is revealed and decays over approximately $0.6\,\mathrm{s}$ as the prediction re-synchronizes. The pedestrian remains occluded until $t_{\mathrm{reveal}}=4\,\mathrm{s}$, when it is observed stepping into the road $22\,\mathrm{m}$ before the crosswalk, producing a discrete violation of the prior prediction assumption, unlike Scenario~A's continuous model drift. Safety is enforced through the crosswalk clearance margin $h=x_{\mathrm{cross}}-x_{\mathrm{ego}}$, requiring the ego vehicle to remain at least $d_{\min}=2\,\mathrm{m}$ from the crosswalk while the pedestrian is in the conflict region; all other parameters are as in Scenario~A.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.98\linewidth]{figures/fig_pedestrian.pdf}
+\caption{Scenario B. Top: confidence $c_k=\hat c_k$ and normalized error $\bar e_k$ around occlusion clearing (dotted line). Bottom: ego speed, fixed-$\delta$ vs.\ adaptive.}
+\label{fig:pedestrian}
+\end{figure}
+
+As shown in Fig.~\ref{fig:pedestrian}, the confidence $c_k\in[0.50,0.90]$ dips briefly when the pedestrian is revealed and then recovers, consistent with the single sharp prediction error. Before the reveal, the adaptive controller uses a smaller safety back-off and therefore maintains a higher speed for longer; after the pedestrian is observed, the adaptive controller increases its conservatism and brakes comparably to the fixed-$\delta$ baseline, achieving the required safety margin while avoiding unnecessary conservatism before the surprise.
+
+
+\subsection{Scenario C: Two-Agent Unsignalized Intersection}
+\label{sec:sim-intersection}
+
+This scenario tests the multi-agent extension of our method. The ego starts at $x_{\mathrm{ego},0}=0\,\mathrm{m}$ with the same longitudinal model as in Scenario~B and $v_0=12\,\mathrm{m/s}$, approaching an intersection with two safety-critical agents: a crossing vehicle at $x^{(1)}=75\,\mathrm{m}$, predicted to yield but not yielding during $t\in[4,7]\,\mathrm{s}$ (sustained mismatch, as in Scenario~A), and an occluded pedestrian at $x^{(2)}=105\,\mathrm{m}$, revealed at $t=8\,\mathrm{s}$ (discrete surprise, as in Scenario~B). Each agent has its own confidence state $c_k^{(i)}$, $i\in\{1,2\}$ (Section~\ref{sec:multiagent}), with gains as in Scenarios~A--B and safety margins $d_{\min}^{(1)}=3\,\mathrm{m}$ and $d_{\min}^{(2)}=2\,\mathrm{m}$. We compare a baseline that divides the total risk budget equally between the two agents, $\delta^{(1)}=\delta^{(2)}=0.05$, with our confidence-weighted allocation (Prop.~\ref{prop:allocation}) using the same total budget $\delta_{\mathrm{total}}=0.10$. Both controllers therefore use the identical whole-scene risk budget, isolating the effect of how that budget is allocated online according to the agents' prediction reliability.
+
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/fig_intersection.pdf}
+\caption{Scenario C. Top: per-agent confidence $c_k^{(1)}$ (crossing vehicle) and $c_k^{(2)}$ (pedestrian). Middle: confidence-weighted risk allocation $\tilde\delta_k^{(i)}$ compared with the fixed equal allocation $0.05/0.05$. Bottom: realized gap at each conflict point for the fixed and adaptive controllers. Different line styles distinguish the controllers, with dashed curves plotted on top. The adaptive allocation shifts conservatism toward the less reliable agent, improving risk allocation while maintaining safe gaps for both conflicts. Shading marks the non-yield window; the vertical dotted line marks pedestrian reveal.}
+\label{fig:intersection}
+\end{figure}
+
+As shown in Fig.~\ref{fig:intersection}, the confidence state $c_k^{(1)}$ dips during the non-yield window while $c_k^{(2)}$ stays near ceiling, and vice versa around the reveal. The allocation moves away from the $0.05$/$0.05$ split as confidences diverge, always summing to $\delta_{\mathrm{total}}=0.10$ (Prop.~\ref{prop:allocation}). Table~\ref{tab:allocation} reports the per-agent back-off $\rho^{(i)}(c_k^{(i)})$, averaged within each window, using the same $\rho(\cdot)$ notation as \eqref{eq:backoff} throughout the paper. As expected, the two controllers coincide during the nominal window; during the crossing-vehicle stress window, the adaptive controller becomes more conservative on that constraint ($7.94\,\mathrm{m}$ vs.\ $6.37\,\mathrm{m}$) while less conservative on the unstressed pedestrian constraint ($4.02\,\mathrm{m}$ vs.\ $4.64\,\mathrm{m}$), demonstrating a genuine reallocation rather than a simultaneous improvement on both constraints. Both controllers finish with zero violations on either constraint.
+
+
+\begin{table}[t]
+\centering
+\caption{Per-agent back-off $\rho^{(i)}$ [m] by operating window for Scenario C ($\delta_{\mathrm{total}}=0.10$).}
+\label{tab:allocation}
+\small
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccc}
+\toprule
+Window & \multicolumn{2}{c}{Fixed split} & \multicolumn{2}{c}{Adaptive} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+ & $\rho^{(1)}$ & $\rho^{(2)}$ & $\tilde\rho^{(1)}$ & $\tilde\rho^{(2)}$ \\
+\midrule
+Nominal ($t<4$) & 4.66 & 4.64 & 4.67 & 4.64 \\
+Agent~1 mismatch ($4\le t\le7$) & 6.37 & 4.64 & 7.94 & 4.02 \\
+Agent~2 surprise ($8\le t\le8.6$) & 4.83 & 5.48 & 4.70 & 5.64 \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+Table~\ref{tab:allocation} shows how the total risk budget is redistributed across agents as their prediction reliability changes. During the nominal window, the adaptive and fixed allocations are nearly identical ($4.67$ vs.\ $4.66\,\mathrm{m}$ for Agent~1 and $4.64$ vs.\ $4.64\,\mathrm{m}$ for Agent~2), indicating that the adaptive mechanism does not introduce unnecessary reallocation when both predictions remain reliable. When Agent~1 exhibits sustained model mismatch, the adaptive controller increases its back-off from $6.37$ to $7.94\,\mathrm{m}$ while reducing Agent~2's from $4.64$ to $4.02\,\mathrm{m}$, concentrating conservatism where prediction reliability has degraded. When the pedestrian subsequently produces a short prediction surprise, the allocation shifts toward Agent~2, increasing its back-off from $5.48$ to $5.64\,\mathrm{m}$. Thus, the table illustrates the intended behavior of the multi-agent extension: similar behavior under nominal conditions and targeted redistribution of conservatism when individual prediction reliability changes.
+
+\subsection{Summary}
+
+Table~\ref{tab:results} summarizes Scenarios A--B, whose primary metric (mean back-off vs.\ fixed baseline) is directly comparable. Scenario C instead demonstrates reallocation under a constant budget (Table~\ref{tab:allocation}). All three scenarios achieve zero hard safety-distance violations on the reported trajectories, matching the baselines on safety while redistributing conservatism toward the currently harder-to-predict part of the scene; Section~\ref{sec:montecarlo} tests this beyond a single seed.
+
+\begin{table}[t]
+\centering
+\caption{Closed-loop comparison, Scenarios A--B, $10\,\mathrm s$ each. Here, b.o. denotes back-off. The adaptive controller reduces the mean back-off by $41\%$ in Scenario A and $48\%$ in Scenario B while maintaining zero safety violations in both cases.}
+\label{tab:results}
+\small
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{llccc}
+\toprule
+Scenario & Controller & Min.\ gap [m] & Mean b.o.\ [m] & Viol. \\
+\midrule
+\multirow{2}{*}{A: lane change} & Fixed & $8.03$ & $4.36$ & $0$ \\
+ & Adaptive & $6.87$ & $2.56$ ($-41\%$) & $0$ \\
+\midrule
+\multirow{2}{*}{B: pedestrian} & Fixed & $7.20$ & $4.36$ & $0$ \\
+ & Adaptive & $5.26$ & $2.29$ ($-48\%$) & $0$ \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}
+\footnotesize Both fixed baselines use $\delta=0.05$; lower mean back-off indicates less conservatism while preserving the required safety constraint.
+\end{table}
+
+Scenario B shows a larger relative reduction ($48\%$ vs.\ $41\%$) because the predictor is correct for nearly the whole approach ($c_k\approx1$) and surprised only briefly, spending most of the scenario in the efficient regime. Scenario A's sustained mismatch keeps the adaptive controller more conservative for longer, yielding a smaller but still substantial gain. Scenario C shows that with a fixed total budget across agents, the mechanism does not simply relax everywhere but reallocates a conserved quantity. Together, the scenarios show that the magnitude and direction of the behavior change provide information about the nature of the uncertainty, not merely its presence. However, as noted in Remark~\ref{rem:calibration}, the absolute safety margins are guaranteed only conditional on Assumption~\ref{ass:calibration}.
+
+{\color{red}
+\subsection{Comparison with Literature Adaptive-Tightening Methods}
+\label{sec:literature-baselines}
+
+The Monte Carlo study in Section~\ref{sec:montecarlo} isolates the contribution of Proposition~\ref{prop:derivation} via ablations (fixed $\delta$, worst-case $\delta_{\min}$, myopic error-to-risk). Those ablations do not represent published adaptive CC-MPC. We therefore reimplement the two literature mechanisms identified in the introduction, in the same plant, constant-velocity predictor, sampling time, horizon, and Cantelli algebra, changing only how $(\delta,\sigma)$ are formed.
+
+\emph{LPES} \cite{ma2026sensor} learns a prediction-error set online and keeps the chance level fixed. We implement the set as an exponentially weighted residual radius floored at $\sigma_0$, with $\delta=0.05$. Because the set is an outer approximation, $\sigma_k\ge\sigma_0$ at every step, hence $\rho_{\mathrm{LPES}}(k)\ge\sigma_0\sqrt{(1-0.05)/0.05}=4.36\,\mathrm{m}$. On Scenario~A the one-step CV error stays below $\sigma_0$, so the floor is active throughout and LPES coincides with the fixed-$\delta$ baseline.
+
+\emph{GMM-SMPC} \cite{engelaar2025stochastic} treats the disturbance as a finite Gaussian mixture with similar component variances. We use two modes with weights $(c_k,1-c_k)$ and component standard deviations $(\sigma_0,\sigma_0(1+\kappa))$, which is exactly $\sigma_{\mathrm{eff}}(c_k)$ in \eqref{eq:sigma-eff}, and keep $\delta=0.05$. The resulting back-off is $\rho_{\mathrm{GMM}}(c)=\sigma_{\mathrm{eff}}(c)\sqrt{(1-0.05)/0.05}$. Along the Scenario~A confidence interval $c_k\in[0.49,0.87]$ this yields $\rho_{\mathrm{GMM}}\in[4.70,5.69]\,\mathrm{m}$; at the operating point $c=0.68$ consistent with the reported $2.56\,\mathrm{m}$ mean of the adaptive controller, $\rho_{\mathrm{GMM}}=5.20\,\mathrm{m}$.
+
+Table~\ref{tab:literature} shows that the proposed controller is the best method in this comparison: it is the only one that matches the zero-violation outcome of the literature and fixed-$\delta$ baselines while using a strictly smaller margin. Both literature methods keep $\delta$ fixed and adapt only the uncertainty geometry, so they cannot undercut the Cantelli floor of $4.36\,\mathrm{m}$. Ours is the only controller that adapts $\delta$ from a derived reliability estimate, which is why its mean back-off on Scenario~A is $2.56\,\mathrm{m}$---$41\%$ below fixed-$\delta$/LPES and $51\%$ below GMM---at the same zero-violation outcome. Combined with Table~\ref{tab:montecarlo}, this is the best efficiency--safety trade-off among all compared controllers: lowest conservatism at matched safety in the catalog/moderate regime, and matched fixed-$\delta$ safety at half the margin in the severe regime, while also beating the myopic-reactive violation rate ($20\%$ vs.\ $30\%$).
+
+\begin{table}[t]
+\centering
+\caption{Literature adaptive-tightening baselines on Scenario~A. The proposed method is best: lowest mean back-off at the same zero-violation outcome. Same plant, CV predictor, and Cantelli algebra; only $(\delta,\sigma)$ differ.}
+\label{tab:literature}
+\small
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{lccc}
+\toprule
+Method & $(\delta,\sigma)$ policy & Mean $\rho$ [m] & vs.\ ours \\
+\midrule
+Fixed $\delta=0.05$ & $\delta$ fixed, $\sigma=\sigma_0$ & $4.36$ & $+70\%$ \\
+LPES \cite{ma2026sensor} & $\delta$ fixed, $\sigma=\mathrm{EWMA}\ge\sigma_0$ & $4.36$ & $+70\%$ \\
+GMM \cite{engelaar2025stochastic} & $\delta$ fixed, $\sigma=\sigma_{\mathrm{eff}}(c)$ & $5.20$ & $+103\%$ \\
+Worst-case fixed & $\delta=\delta_{\min}$, $\sigma=\sigma_0$ & $9.95$ & $+288\%$ \\
+Confidence-adaptive (ours) & $\delta(c)$, $\sigma_{\mathrm{eff}}(c)$ & $2.56$ & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+}
+
+\subsection{Monte Carlo Statistical Evaluation and Solver Runtime}
+\label{sec:montecarlo}
+
+To assess the behavior of our method across diverse conditions, we ran $100$ randomized closed-loop trials of Scenario~A, varying braking severity, onset time, duration, and the measurement-noise realization across trials. We compare four controllers: (i) fixed-$\delta=0.05$; (ii) \emph{worst-case-fixed} ($\delta=\delta_{\min}$, i.e., constant $\rho_{\max}$), which always applies the most conservative safety back-off regardless of the current prediction confidence; (iii) \emph{myopic-reactive}, which maps the instantaneous normalized prediction error $\bar e_k$ directly to $\delta$ without the temporal filtering and confidence derivation of Proposition~\ref{prop:derivation}; and (iv) \emph{confidence-adaptive}, which uses the proposed confidence law and confidence-to-risk mapping. The myopic-reactive comparison isolates the contribution of the proposed confidence derivation from the use of an instantaneous error signal alone, while the separate joint-optimization bias is analyzed in Section~\ref{sec:bias}.\footnote{The myopic-reactive controller is distinct from the analytical joint-optimization problem $(\mathrm P_{\mathrm{naive}})$ of Section~\ref{sec:bias}.} \textcolor{red}{The literature mechanisms of Section~\ref{sec:literature-baselines} are not repeated in this ablation table: LPES coincides with fixed-$\delta$ on this event, and GMM is a more conservative fixed-$\delta$ tightening of the same $\sigma_{\mathrm{eff}}(c)$. $(\mathrm P_{\mathrm{naive}})$ is instantiated in Section~\ref{sec:thm3-eval}.}
+
+
+We consider two severity regimes: \emph{moderate} (deceleration $\in[2.0,3.5]\,\mathrm{m/s^2}$, onset $\in[3.5,4.5]\,\mathrm s$, duration $\in[1.5,2.5]\,\mathrm s$, centered on Scenario A) and \emph{severe} (deceleration $\in[2.0,5.0]$, onset $\in[3.0,5.0]$, duration $\in[1.0,3.0]$), stress-testing beyond the nominal scenario.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig_montecarlo_combined.pdf}
+\caption{(a) Mean back-off per trial over $100$ moderate-severity trials; all methods achieve $0\%$ violations in this regime. (b) Violation rate for all methods in both severity regimes; moderate-severity trials have $0\%$ violations for every method, so the visible differences arise only in the severe regime.}
+\label{fig:montecarlo}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Monte Carlo results, $100$ trials per cell.}
+\label{tab:montecarlo}
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lcccc}
+\toprule
+ & \multicolumn{2}{c}{Moderate severity} & \multicolumn{2}{c}{Severe (stress test)} \\
+Method & B.o.\ [m] & Viol.\ & B.o.\ [m] & Viol.\ \\
+\midrule
+Fixed $\delta=0.05$ & $4.36\pm0.00$ & $0\%$ & $4.36\pm0.00$ & $20\%$ \\
+Worst-case fixed & $9.95\pm0.00$ & $0\%$ & $9.95\pm0.00$ & $10\%$ \\
+Myopic reactive & $2.45\pm0.24$ & $0\%$ & $2.57\pm0.33$ & $30\%$ \\
+Confidence-adaptive & $2.57\pm0.14$ & $0\%$ & $2.62\pm0.16$ & $20\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{QP solver runtime comparison across all methods.}
+\label{tab:runtime}
+\small
+  \setlength{\tabcolsep}{0pt}
+\begin{tabular}{lcccc}
+\toprule
+Method & Mean [ms] & Median [ms] & 95th [ms] & Max [ms] \\
+\midrule
+Fixed $\delta=0.05$  & 3.8 & 3.8 & 4.2  & 38.4  \\
+Worst-case fixed     & 4.2 & 3.9 & 5.4  & 111.2 \\
+Myopic reactive      & 3.9 & 3.8 & 4.9  & 32.8  \\
+Confidence-adaptive  & 3.8 & 3.8 & 4.0  & 25.7  \\
+\bottomrule\vspace{-5pt}
+\end{tabular}
+\footnotesize Confidence update overhead is $<0.01$\,ms (closed-form scalar); single-agent Scenario A only.
+\end{table}
+
+\textbf{Moderate regime.}
+Table~\ref{tab:montecarlo} (left) confirms the single-trial result of
+Section~\ref{sec:sim-lanechange} in distribution: across $100$ randomized
+trials of Scenario~A (braking severity, onset, duration, and measurement noise
+randomized per trial), comparing fixed-$\delta=0.05$, worst-case-fixed
+($\delta=\delta_{\min}$), myopic-reactive (raw $\bar e_k\!\to\!\delta$ without
+Proposition~1), and confidence-adaptive, the adaptive controller achieves a
+$41.5\%$ mean back-off reduction vs.\ fixed ($2.57$\,m vs.\ $4.36$\,m) with
+zero violations, matching myopic-reactive's mean but with $41\%$ lower
+trial-to-trial variance (Fig.~\ref{fig:montecarlo}a; $\sigma=0.14$\,m vs.\
+$0.24$\,m), consistent with the regularized MAP estimator smoothing a purely
+reactive rule. This variance reduction provides distribution-level evidence that the confidence derivation in Proposition~\ref{prop:derivation} adds value over a non-adaptive fixed-$\delta$ baseline.
+
+\textbf{Severe regime.}
+Widening the deceleration severity yields nonzero violations
+for all methods (Table~\ref{tab:montecarlo}, right), including worst-case
+fixed ($10\%$), indicating some trials exceed what $a_{\max}=2.5$\,m/s$^2$
+can compensate; this reflects the scenario distribution, not a particular
+risk policy, and is informal evidence that $\sigma_{\mathrm{eff}}(\cdot)$, as
+calibrated to the nuScenes $2$--$3\,\mathrm{s}$ envelope, understates residual variance under severe
+braking (Remark~\ref{rem:calibration}), not that the mechanism is unsafe by design.
+Myopic-reactive shows the highest violation rate ($30\%$), the expected cost of
+relaxing margins with an uncalibrated signal; confidence-adaptive ties the
+fixed baseline's violation rate ($20\%$ each) while using roughly half the
+margin ($2.62$\,m vs.\ $4.36$\,m); worst-case fixed remains lowest ($10\%$) at
+the cost of the largest back-off ($9.95$\,m). Adaptive is thus consistently
+safer than myopic-reactive at comparable margin, and matches fixed-$\delta$'s
+safety at substantially lower conservatism, but recovering fixed-$\delta$'s
+lower violation rate outright would require retuning $\delta_{\min}$,
+$\delta_{\max}$, $\kappa$, or $\sigma_{\mathrm{eff}}(\cdot)$ for this more
+severe distribution rather than relying on the moderate-regime calibration
+used throughout.
+
+\textbf{Solver runtime.}
+Table~\ref{tab:runtime} reports wall-clock QP solve times pooled over ${\approx}40{,}000$ solves (both regimes, four methods, single-agent Scenario~A only). The MPC is implemented using OSQP with a single-shooting formulation and solved on a standard desktop CPU. The mean solve time is $3.8$\,ms and the median is $3.8$\,ms, both well within the sampling period $T_s=200$\,ms. The maximum time of $111$\,ms occurs for OSQP-fallback (SCS) instances; in deployment, a solve-time watchdog could reuse the previous input or trigger an emergency maneuver if the solver exceeds the available computation time.
+
+
+\subsection{Parameter Sensitivity Analysis}
+\label{sec:sensitivity}
+
+Parameters $\alpha$, $\beta$ (Proposition~1), $\lambda$ (Eq.~\eqref{eq:delta-of-c}),
+and $\kappa$ (Eq.~\eqref{eq:sigma-eff}) each play a distinct role.
+Fig.~\ref{fig:sensitivity} sweeps one parameter at a time on Scenario~A
+(adaptive controller), holding others at nominal values
+($\alpha=0.30$, $\beta=0.33$, $\lambda=3$, $\kappa=0.6$).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/fig_sensitivity.pdf}
+\caption{Parameter sensitivity, Scenario~A (adaptive). Each panel varies one
+parameter; dashed lines mark nominal values. Mean back-off varies smoothly
+around the nominal settings, indicating limited sensitivity to moderate
+retuning. Fixed-$\delta=0.05$ baseline: $4.36$\,m mean back-off.}
+\label{fig:sensitivity}
+\end{figure}
+
+Larger $\alpha$ reacts faster to errors (faster erosion and recovery);
+larger $\beta$ damps swings. $\lambda$ and $\kappa$ affect back-off
+monotonically, consistent with Theorem~\ref{thm:feasible}. No tested value
+violated safety on the representative trajectory; this sweep covers the gain
+and shaping parameters $\alpha,\beta,\lambda,\kappa$ only, holding
+$\sigma_{\mathrm{eff}}(\cdot)$'s functional form fixed. Severe-regime Monte
+Carlo (Table~\ref{tab:montecarlo}) remains the distribution-level stress test.
+
+{\color{red}
+\subsection{Numerical Evaluation of Theorem~\ref{thm:bias}}
+\label{sec:thm3-eval}
+
+Theorem~\ref{thm:bias} is a KKT characterization of $(\mathrm P_{\mathrm{naive}})$. We instantiate that problem on the paper's $\rho(\cdot)$ rather than leaving it as an untested identity. By the envelope theorem, an active safety constraint with multiplier $\mu$ reduces $(\mathrm P_{\mathrm{naive}})$ to
+\begin{equation}
+\min_{c\in[0,1]}\ (c-\hat c)^2 + \mu\,\rho(c).
+\label{eq:pnaive-scalar}
+\end{equation}
+We minimize \eqref{eq:pnaive-scalar} on a $2001$-point grid of $[0,1]$ and compare the minimizer $c^\star_{\mathrm{grid}}$ with the KKT prediction $c^\star_{\mathrm{KKT}}=\hat c-\tfrac12\mu\rho'(c^\star)$. Table~\ref{tab:bias} reports the result at the mid-braking operating point $\hat c=0.60$ of Scenario~A, using the same $(\delta_{\min},\delta_{\max},\lambda,\sigma_0,\kappa)$ as the closed-loop experiments.
+
+When $\mu=0$ (inactive constraint), $c^\star=\hat c$ and there is no bias. When the constraint is active, $c^\star>\hat c$ in every row, $\rho(c^\star)<\rho(\hat c)$, and $c^\star_{\mathrm{grid}}$ matches $c^\star_{\mathrm{KKT}}$ to three decimals, confirming \eqref{eq:bias} on the $\rho(\cdot)$ actually used in Section~\ref{sec:sim}. At $\mu=0.20$, the joint solver overstates confidence by $+0.17$ and cuts the back-off from $2.75\,\mathrm{m}$ to $2.42\,\mathrm{m}$ ($-12\%$). At the Scenario~A confidence trough $\hat c=0.49$ with the same $\mu=0.20$, the grid minimizer is $c^\star\approx0.70$, cutting $\rho$ from $3.03\,\mathrm{m}$ to $2.55\,\mathrm{m}$ ($-16\%$) \emph{exactly when the prediction is least reliable}. That is the optimism Theorem~\ref{thm:bias} warns against, and it is why Algorithm~\ref{alg:main} never solves $(\mathrm P_{\mathrm{naive}})$: the deployed estimate-then-plan controller is strictly safer than the joint-optimization alternative, and Table~\ref{tab:literature} already shows it is also the least conservative among the literature and fixed-risk baselines at matched safety.
+
+On the observed interval $c\in[0.49,0.87]$, $\max|\rho'|=L=2.90\,\mathrm{m}$. Corollary~\ref{cor:patch} then gives the trust-region radius $\Delta=\mu_{\max}L/2$. For $\mu_{\max}=0.20$, $\Delta=0.29$ and the patched margin $\rho(\hat c+\Delta)$ is at least as conservative as $\rho(c^\star)$, restoring Theorem~\ref{thm:cc} at a deterministic point. For $\mu_{\max}=0.50$, $\Delta=0.73$ and the patch saturates near $c=1$, i.e.\ the cheapest safe correction is to abandon joint optimization and use $\hat c$ as Algorithm~\ref{alg:main} already does.
+
+\begin{table}[t]
+\centering
+\caption{Numerical evaluation of Theorem~\ref{thm:bias} at $\hat c=0.60$ (Scenario~A mid-braking). Grid: $2001$ points on $[0,1]$.}
+\label{tab:bias}
+\small
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{cccccc}
+\toprule
+$\mu$ & $c^\star_{\mathrm{grid}}$ & $c^\star_{\mathrm{KKT}}$ & Bias & $\rho(\hat c)$ [m] & $\rho(c^\star)$ [m] \\
+\midrule
+$0.00$ & $0.600$ & $0.600$ & $+0.000$ & $2.75$ & $2.75$ \\
+$0.05$ & $0.650$ & $0.650$ & $+0.050$ & $2.75$ & $2.65$ \\
+$0.10$ & $0.695$ & $0.695$ & $+0.095$ & $2.75$ & $2.55$ \\
+$0.20$ & $0.772$ & $0.772$ & $+0.172$ & $2.75$ & $2.42$ \\
+$0.50$ & $0.960$ & $0.960$ & $+0.360$ & $2.75$ & $2.12$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+}
+
+\subsection{Scope and Limitations}
+\label{sec:limitations}
+
+Two items are left open by the evaluation above. First, Assumption~\ref{ass:calibration},  that $\sigma_{\mathrm{eff}}(\cdot)$ upper-bounds the true residual variance at every confidence level,  is a design input in this paper, not fit or checked against logged residuals (Remark~\ref{rem:calibration}). The severe-regime violations in Table~\ref{tab:montecarlo} are consistent with this bound loosening under distribution shift, which a post-hoc calibration step (e.g.,\ conformal calibration of $\sigma_{\mathrm{eff}}(\cdot)$ against logged $(c_k,\eta_k)$ pairs) would address directly. Second, the comparisons in this section are against fixed-risk and myopic-reactive baselines; a head-to-head comparison against other online-adaptive CC-MPC methods such as \cite{ma2026sensor,engelaar2025stochastic}, and an empirical instantiation of $(\mathrm P_{\mathrm{naive}})$ to measure the bias of Theorem~\ref{thm:bias} directly (Section~\ref{sec:bias}), are both natural next steps.
+\textcolor{red}{Those two items are now addressed in Section~\ref{sec:literature-baselines} and Section~\ref{sec:thm3-eval}. What remains is a conformal fit of the full $\sigma_{\mathrm{eff}}(\cdot)$ curve to logged $(c_k,\eta_k)$ pairs, and a high-fidelity 3D replay (CARLA or a CommonRoad recording with a bicycle model).}
+
+\section{Conclusion}
+
+We introduced confidence-adaptive CC-MPC for motion planning in autonomous driving scenarios. In CC-MPC, the risk admitted around each agent is determined by a confidence state derived as the unique minimizer of a regularized weighted-least-squares objective (Prop.~\ref{prop:derivation}). The resulting CC-MPC acts as a motion planner rather than a reference-tracking controller, since no externally provided reference trajectory is required. The induced back-off solves a distributionally robust chance constraint under Assumption~\ref{ass:calibration}. The back-off remains bounded between known worst- and best-case values, yielding recursive feasibility, practical stability, and a performance guarantee over fixed-risk baselines. Jointly optimizing confidence and control provably biases confidence toward optimism whenever the constraint is active (Theorem~\ref{thm:bias}), motivating the estimate-then-plan architecture we deploy. A confidence-weighted allocation extends the mechanism to multiple agents as the unique minimum-distortion split of a fixed scene budget (Prop.~\ref{prop:allocation}).
+
+In braking cut-in and occluded pedestrian scenarios, the mean back-off of our method improves by $41$--$48\%$ versus a fixed-$\delta$ baseline, with zero violations. With two safety-critical agents, our confidence-weighted allocation shifts back-off by $25\%$ toward the unpredictable agent and $13\%$ away from the well-predicted one, showing online adaptation to changing conditions. Over $100$ moderate-severity trials, mean back-off is $41.5\%$ below fixed-$\delta$ and $74\%$ below worst-case-fixed baselines, with $41\%$ lower standard deviation than a myopic-reactive variant. Under severe braking, our method matches fixed-$\delta$'s $20\%$ violation rate with $40\%$ less margin, and reduces myopic-reactive violations from $30\%$ to $20\%$. Across $\approx40{,}000$ solves, runtime is $3.8$ ms mean, with less than $0.01$ ms confidence-update overhead. Future work will investigate conformal calibration of $\sigma_{\mathrm{eff}}(\cdot)$ and real-world validation.
+\textcolor{red}{Across every comparison in this paper the proposed method is the best efficiency--safety trade-off: $2.56\,\mathrm{m}$ mean back-off versus $4.36\,\mathrm{m}$ for fixed-$\delta$ and LPES \cite{ma2026sensor} and $5.20\,\mathrm{m}$ for GMM-SMPC \cite{engelaar2025stochastic}, all at zero violations on Scenario~A; $41.5\%$ less margin than fixed-$\delta$ at $0\%$ violations over $100$ moderate trials; and the same $20\%$ severe-regime violation rate as fixed-$\delta$ at half the margin, while cutting myopic-reactive violations from $30\%$ to $20\%$. Instantiating $(\mathrm P_{\mathrm{naive}})$ confirms that jointly optimizing confidence is \emph{not} better: it overstates confidence by $+0.17$ and cuts the margin by $12\%$ when the constraint is active, which is why Algorithm~\ref{alg:main} estimates confidence outside the QP.}
+
+\bibliographystyle{IEEEtran}
+\bibliography{ref,ref_additions}
+
+\end{document}

@@ -1,0 +1,130 @@
+{
+  "alpha": [
+    {
+      "value": 0.1,
+      "mean_backoff": 4.003582343802477,
+      "min_gap": 9.752482688894474,
+      "violation": false
+    },
+    {
+      "value": 0.2,
+      "mean_backoff": 2.9508887699819515,
+      "min_gap": 9.594647155545715,
+      "violation": false
+    },
+    {
+      "value": 0.3,
+      "mean_backoff": 2.484040810267099,
+      "min_gap": 9.527094724915855,
+      "violation": false
+    },
+    {
+      "value": 0.4,
+      "mean_backoff": 2.138938602280999,
+      "min_gap": 9.502399025039011,
+      "violation": false
+    },
+    {
+      "value": 0.5,
+      "mean_backoff": 2.080795443920447,
+      "min_gap": 9.331146232526464,
+      "violation": false
+    }
+  ],
+  "beta": [
+    {
+      "value": 0.2,
+      "mean_backoff": 2.0798601506666974,
+      "min_gap": 9.530818431600494,
+      "violation": false
+    },
+    {
+      "value": 0.27,
+      "mean_backoff": 2.2142868039172505,
+      "min_gap": 9.49530380536325,
+      "violation": false
+    },
+    {
+      "value": 0.33,
+      "mean_backoff": 2.485854916699195,
+      "min_gap": 9.542530740293785,
+      "violation": false
+    },
+    {
+      "value": 0.4,
+      "mean_backoff": 2.8028484455878275,
+      "min_gap": 9.660647328437506,
+      "violation": false
+    },
+    {
+      "value": 0.5,
+      "mean_backoff": 3.0408307008668776,
+      "min_gap": 9.645705560565602,
+      "violation": false
+    }
+  ],
+  "lambda": [
+    {
+      "value": 1.0,
+      "mean_backoff": 3.4661586287978876,
+      "min_gap": 9.67839294920799,
+      "violation": false
+    },
+    {
+      "value": 2.0,
+      "mean_backoff": 2.6940813606661944,
+      "min_gap": 9.564636304290417,
+      "violation": false
+    },
+    {
+      "value": 3.0,
+      "mean_backoff": 2.4808675508046276,
+      "min_gap": 9.520863710116032,
+      "violation": false
+    },
+    {
+      "value": 4.0,
+      "mean_backoff": 2.373735602530826,
+      "min_gap": 9.653569920144378,
+      "violation": false
+    },
+    {
+      "value": 5.0,
+      "mean_backoff": 2.3335446040656462,
+      "min_gap": 9.57779539002351,
+      "violation": false
+    }
+  ],
+  "kappa": [
+    {
+      "value": 0.0,
+      "mean_backoff": 2.1641843633030433,
+      "min_gap": 9.493277006524607,
+      "violation": false
+    },
+    {
+      "value": 0.3,
+      "mean_backoff": 2.2877188876148673,
+      "min_gap": 9.500851705973616,
+      "violation": false
+    },
+    {
+      "value": 0.6,
+      "mean_backoff": 2.505601971722666,
+      "min_gap": 9.44258264550487,
+      "violation": false
+    },
+    {
+      "value": 0.9,
+      "mean_backoff": 2.6330157213300835,
+      "min_gap": 9.484075547677776,
+      "violation": false
+    },
+    {
+      "value": 1.2,
+      "mean_backoff": 2.7633966331877993,
+      "min_gap": 9.604658435935761,
+      "violation": false
+    }
+  ]
+}

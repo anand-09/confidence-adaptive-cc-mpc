@@ -1,0 +1,37 @@
+% ============================================================================
+%  section_v_sensitivity.tex
+%  NEW Section V-F — paste immediately BEFORE \section{Conclusion}
+% ============================================================================
+
+\subsection{Parameter Sensitivity Analysis}
+\label{sec:sensitivity}
+
+We introduced four tuning parameters---$\alpha$, $\beta$, $\lambda$, and
+$\kappa$---with distinct roles in the confidence filter and risk modulation
+(Sections~III--IV).
+Fig.~\ref{fig:sensitivity} reports a one-at-a-time parameter sweep on
+Scenario~A with the adaptive controller; all other parameters remain at their
+nominal values used throughout Section~V.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{fig_sensitivity.pdf}
+\caption{Parameter sensitivity on Scenario~A (adaptive controller).
+Each panel varies one parameter while holding the others at nominal values
+($\alpha=0.30$, $\beta=0.33$, $\lambda=3$, $\kappa=0.6$; dashed vertical
+lines). Mean back-off varies smoothly; the nominal setting lies in the
+interior of a flat region for each parameter, indicating robustness to
+moderate retuning.}
+\label{fig:sensitivity}
+\end{figure}
+
+The evidence gain~$\alpha$ and prior-anchor gain~$\beta$ control the
+erosion--recovery asymmetry of the MAP filter (Proposition~1): larger
+$\alpha$ reacts faster to prediction errors; larger~$\beta$ damps transient
+confidence swings.
+Risk-modulation parameters~$\lambda$ and~$\kappa$ affect back-off magnitude
+monotonically, consistent with Theorem~\ref{thm:feasible}.
+Across the tested ranges, no setting produced a safety violation on the
+representative Scenario~A trajectory; the severe-regime Monte Carlo study
+(Table~\ref{tab:montecarlo}) remains the distribution-level stress test for
+calibration.

@@ -1,0 +1,17 @@
+\begin{table}[t]
+\centering
+\caption{Monte Carlo results, $100$ trials per cell.}
+\label{tab:montecarlo}
+\small
+\begin{tabular}{lcccc}
+\toprule
+ & \multicolumn{2}{c}{Moderate severity} & \multicolumn{2}{c}{Severe (stress test)} \\
+Method & B.o.\ [m] & Viol.\ & B.o.\ [m] & Viol.\ \\
+\midrule
+Fixed $\delta=0.05$ & $4.36\pm0.00$ & $0\%$ & $4.36\pm0.00$ & $20\%$ \\
+Worst-case fixed & $9.95\pm0.00$ & $0\%$ & $9.95\pm0.00$ & $10\%$ \\
+Naive reactive & $2.45\pm0.24$ & $0\%$ & $2.57\pm0.33$ & $30\%$ \\
+Confidence-adaptive & $2.57\pm0.14$ & $0\%$ & $2.62\pm0.16$ & $20\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}

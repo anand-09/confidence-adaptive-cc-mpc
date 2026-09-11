@@ -1,0 +1,8 @@
+Table: Scenarios A-B
+Scenario A: Fixed min_gap=12.00/12.00 (ad/fx), mean rho 3.07/4.36 (29% reduction), violations 0/0
+Scenario B: Fixed min_gap=5.42/7.12 (ad/fx), mean rho 2.26/4.36 (48% reduction), violations 0/0
+
+Table: Scenario C allocation windows
+calm: adaptive rho1=4.65, rho2=4.59 | fixed rho1=4.36, rho2=4.36
+agent1_stressed: adaptive rho1=13.08, rho2=3.65 | fixed rho1=4.36, rho2=4.36
+agent2_spike: adaptive rho1=4.65, rho2=4.95 | fixed rho1=4.36, rho2=4.36

@@ -1,0 +1,13 @@
+Monte Carlo summary
+
+MODERATE:
+  fixed: backoff=4.36+/-0.00 m, viol=0%, solve_mean=21.0 ms
+  worst_case: backoff=15.92+/-0.00 m, viol=0%, solve_mean=21.1 ms
+  naive_reactive: backoff=15.92+/-0.00 m, viol=0%, solve_mean=21.0 ms
+  adaptive: backoff=13.84+/-0.00 m, viol=0%, solve_mean=21.0 ms
+
+SEVERE:
+  fixed: backoff=4.36+/-0.00 m, viol=0%, solve_mean=21.6 ms
+  worst_case: backoff=15.92+/-0.00 m, viol=0%, solve_mean=21.6 ms
+  naive_reactive: backoff=15.92+/-0.00 m, viol=0%, solve_mean=21.8 ms
+  adaptive: backoff=13.84+/-0.00 m, viol=0%, solve_mean=21.6 ms
