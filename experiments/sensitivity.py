@@ -1,5 +1,5 @@
 """
-Parameter sensitivity analysis (reviewer request: effect of alpha, beta, lambda, kappa).
+Parameter sensitivity analysis: effect of alpha, beta, lambda, and kappa.
 
 Runs a single representative Scenario-A trial per parameter value using the
 fast Monte Carlo simulator core.

@@ -40,7 +40,7 @@ from plotting.generate_figures import generate_all
 def write_experiment_report(out: Path, mod, sev) -> None:
     lines = [
         "=" * 60,
-        "EXPERIMENTAL RESULTS SUMMARY (ACC submission)",
+        "EXPERIMENTAL RESULTS SUMMARY",
         "=" * 60,
         "",
         "1. MONTE CARLO — MODERATE SEVERITY",
@@ -77,10 +77,7 @@ def write_experiment_report(out: Path, mod, sev) -> None:
     ]
     ranked = sorted(mod.summary, key=lambda r: r["mean_backoff"])
     for i, row in enumerate(ranked, 1):
-        extra = ""
-        if row["method"] == "adaptive":
-            extra = " <-- RECOMMENDED: best efficiency–safety–robustness trade-off"
-        lines.append(f"   #{i} {row['method']:12s}  {row['mean_backoff']:.2f} m  viol={row['viol_rate']:.0f}%{extra}")
+        lines.append(f"   #{i} {row['method']:12s}  {row['mean_backoff']:.2f} m  viol={row['viol_rate']:.0f}%")
 
     lines += [
         "",
@@ -88,15 +85,6 @@ def write_experiment_report(out: Path, mod, sev) -> None:
         f"   Mean solve time: {ad['solve_mean_ms']:.1f} ms  (control period T_s=200 ms)",
         f"   95th percentile: {ad['solve_p95_ms']:.1f} ms",
         f"   Maximum:         {ad['solve_max_ms']:.1f} ms",
-        "",
-        "5. REVIEWER CHECKLIST",
-        "   [x] Statistical MC evaluation (100 randomized trials)",
-        "   [x] Worst-case fixed baseline (Tube/Robust MPC equivalent)",
-        "   [x] Naive-reactive baseline (no Prop. 1 estimator)",
-        "   [x] Fixed delta=0.05 CC-MPC baseline",
-        "   [x] Solver runtime statistics",
-        "   [x] Parameter sensitivity (alpha, beta, lambda, kappa)",
-        "   [ ] High-fidelity sim (CARLA/CommonRoad) — future work",
         "",
         "=" * 60,
     ]

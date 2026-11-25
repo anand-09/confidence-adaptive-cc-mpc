@@ -1,7 +1,7 @@
 """
 Fast Monte Carlo evaluation for Scenario A (lane-change + braking cut-in).
 
-Reviewer additions addressed:
+Evaluates:
   1. Statistical evaluation over randomized trials.
   2. Baseline spectrum: fixed delta=0.05, worst-case fixed, naive-reactive,
      confidence-adaptive (Proposition 1 MAP estimator).
@@ -370,7 +370,7 @@ def replot_mc_combined(mc_dir: str | Path, out_path: str | Path) -> None:
 
 
 def runtime_latex_table(mod: MCResults, sev: MCResults) -> str:
-    """LaTeX table for solver runtime (reviewer request)."""
+    """LaTeX table for solver runtime."""
     lines = [
         r"\begin{table}[t]",
         r"\centering",
