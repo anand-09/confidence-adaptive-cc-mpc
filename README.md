@@ -111,7 +111,6 @@ plotting/                   Paper figures
 scripts/                    Theory checks and result export
 tests/                      Unit tests
 outputs/                    Saved numeric summaries used in the paper
-caspc_acc.tex               Manuscript
 ```
 
 ## Setup
